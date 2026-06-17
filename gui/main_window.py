@@ -15,10 +15,8 @@ class MainWindow(QMainWindow):
 
         pixmap = QPixmap("Jaguar.png")  # <-- your image path
         self.image_label.setPixmap(pixmap)
-        self.image_label.setScaledContents(True)
-        self.image_label.setFixedSize(200, 200)
+        
 
-        ## this is for gif animation
        
 
         self.start_btn = QPushButton("Start Voice")
