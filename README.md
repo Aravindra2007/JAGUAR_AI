@@ -1,6 +1,6 @@
 <div align="center">
 
-# ðŸ† JAGUAR AI
+# 🐆 JAGUAR AI
 
 ### Your Personalized Desktop AI Assistant
 
@@ -9,64 +9,64 @@
 ![Status](https://img.shields.io/badge/Status-Actively%20Updating-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Personal-purple?style=for-the-badge)
 
-> âš¡ *JAGUAR AI is a powerful, modular, voice-enabled desktop AI assistant built entirely in Python â€” designed to work natively on your system with full local and cloud AI support.*
+> ⚡ *JAGUAR AI is a powerful, modular, voice-enabled desktop AI assistant built entirely in Python — designed to work natively on your system with full local and cloud AI support.*
 
 ---
 
 </div>
 
-## ðŸš€ Overview
+## 🚀 Overview
 
-**JAGUAR AI** is a personal desktop AI assistant built to bring intelligent automation, voice interaction, memory, scheduling, and more â€” all in one unified application. It is actively being developed and upgraded with new capabilities.
+**JAGUAR AI** is a personal desktop AI assistant built to bring intelligent automation, voice interaction, memory, scheduling, and more — all in one unified application. It is actively being developed and upgraded with new capabilities.
 
 The project is structured around a clean modular architecture, making it easy to extend with new skills, agents, plugins, and integrations as the project grows.
 
 ---
 
-## âœ¨ Features
+## ✨ Features
 
-- ðŸŽ™ï¸ **Voice Interaction** â€” Speak to JAGUAR using your microphone; it listens, understands, and responds via speech synthesis
-- ðŸ¤– **AI Backends** â€” Supports both OpenAI (cloud) and Ollama (local) for flexible, private AI responses
-- ðŸ–¥ï¸ **Desktop Automation** â€” Controls your system via PyAutoGUI and PyGetWindow â€” open apps, click, type, and more
-- ðŸ§  **Memory System** â€” Persistent memory to recall past conversations and context
-- ðŸ“… **Scheduler** â€” Schedule tasks and reminders to run at specific times
-- ðŸ”Œ **Plugin System** â€” Modular plugins to add new capabilities without modifying core code
-- ðŸ‘ï¸ **Vision & OCR** â€” Analyze screenshots, images, and documents using EasyOCR and OpenCV
-- ðŸ“„ **PDF Support** â€” Read and process PDF files using PyMuPDF and pypdf
-- ðŸŒ **Web Integration** â€” Browse and search the web using PyWhatKit and Requests
-- ðŸ”” **Wake Word Detection** â€” Always-listening wake word support via Pvporcupine
-- ðŸ–¼ï¸ **Modern GUI** â€” Clean, responsive desktop interface built with PyQt6
+- 🎙️ **Voice Interaction** — Speak to JAGUAR using your microphone; it listens, understands, and responds via speech synthesis
+- 🤖 **AI Backends** — Supports both OpenAI (cloud) and Ollama (local) for flexible, private AI responses
+- 🖥️ **Desktop Automation** — Controls your system via PyAutoGUI and PyGetWindow — open apps, click, type, and more
+- 🧠 **Memory System** — Persistent memory to recall past conversations and context
+- 📅 **Scheduler** — Schedule tasks and reminders to run at specific times
+- 🔌 **Plugin System** — Modular plugins to add new capabilities without modifying core code
+- 👁️ **Vision & OCR** — Analyze screenshots, images, and documents using EasyOCR and OpenCV
+- 📄 **PDF Support** — Read and process PDF files using PyMuPDF and pypdf
+- 🌐 **Web Integration** — Browse and search the web using PyWhatKit and Requests
+- 🔔 **Wake Word Detection** — Always-listening wake word support via Pvporcupine
+- 🖼️ **Modern GUI** — Clean, responsive desktop interface built with PyQt6
 
 ---
 
-## ðŸ—‚ï¸ Project Structure
+## 🗂️ Project Structure
 
 ```
 JAGUAR_AI/
-â”‚
-â”œâ”€â”€ main.py                 # Entry point â€” launches the GUI and assistant
-â”‚
-â”œâ”€â”€ core/                   # Core assistant engine (JaguarAssistant class)
-â”œâ”€â”€ ai/                     # AI model integrations (OpenAI, Ollama, etc.)
-â”œâ”€â”€ agents/                 # Autonomous agents for complex tasks
-â”œâ”€â”€ automation/             # System automation modules (PyAutoGUI, windows)
-â”œâ”€â”€ gui/                    # PyQt6 graphical user interface
-â”œâ”€â”€ memory/                 # Persistent memory and conversation history
-â”œâ”€â”€ plugins/                # Plug-and-play feature extensions
-â”œâ”€â”€ scheduler/              # Task and reminder scheduling engine
-â”œâ”€â”€ skills/                 # Individual skill definitions (web, files, etc.)
-â”œâ”€â”€ system/                 # System-level utilities and OS interaction
-â”œâ”€â”€ tasks/                  # Task management and execution
-â”œâ”€â”€ voice/                  # Speech recognition and TTS (text-to-speech)
-â”œâ”€â”€ logs/                   # Runtime logs
-â”‚
-â”œâ”€â”€ requirements.txt        # Python dependencies
-â””â”€â”€ README.md               # This file
+│
+├── main.py                 # Entry point — launches the GUI and assistant
+│
+├── core/                   # Core assistant engine (JaguarAssistant class)
+├── ai/                     # AI model integrations (OpenAI, Ollama, etc.)
+├── agents/                 # Autonomous agents for complex tasks
+├── automation/             # System automation modules (PyAutoGUI, windows)
+├── gui/                    # PyQt6 graphical user interface
+├── memory/                 # Persistent memory and conversation history
+├── plugins/                # Plug-and-play feature extensions
+├── scheduler/              # Task and reminder scheduling engine
+├── skills/                 # Individual skill definitions (web, files, etc.)
+├── system/                 # System-level utilities and OS interaction
+├── tasks/                  # Task management and execution
+├── voice/                  # Speech recognition and TTS (text-to-speech)
+├── logs/                   # Runtime logs
+│
+├── requirements.txt        # Python dependencies
+└── README.md               # This file
 ```
 
 ---
 
-## ðŸ› ï¸ Installation
+## 🛠️ Installation
 
 ### Prerequisites
 
@@ -99,7 +99,7 @@ python main.py
 
 ---
 
-## ðŸ“¦ Dependencies
+## 📦 Dependencies
 
 | Package | Purpose |
 |---|---|
@@ -125,7 +125,7 @@ python main.py
 
 ---
 
-## âš™ï¸ Configuration
+## ⚙️ Configuration
 
 Create a `.env` file in the project root with the following (fill in your own values):
 
@@ -139,7 +139,7 @@ You can get a free Porcupine key at [picovoice.ai](https://picovoice.ai) and an 
 
 ---
 
-## ðŸ§© Adding Plugins & Skills
+## 🧩 Adding Plugins & Skills
 
 JAGUAR AI is designed to grow. To add a new skill or plugin:
 
@@ -151,7 +151,7 @@ New capabilities can be added without touching the core engine.
 
 ---
 
-## ðŸ”§ Troubleshooting
+## 🔧 Troubleshooting
 
 **PyAudio installation fails:**
 ```bash
@@ -170,7 +170,7 @@ Ensure Ollama is running locally (`ollama serve`) and the model is pulled (`olla
 
 ---
 
-## ðŸ›£ï¸ Roadmap
+## 🛣️ Roadmap
 
 > This project is actively being updated and upgraded.
 
@@ -184,15 +184,15 @@ Ensure Ollama is running locally (`ollama serve`) and the model is pulled (`olla
 
 ---
 
-## ðŸ‘¨â€ðŸ’» Author
+## 👨‍💻 Author
 
-**Aravindra** â€” [@Aravindra2007](https://github.com/Aravindra2007)
+**Aravindra** — [@Aravindra2007](https://github.com/Aravindra2007)
 
 Built as a personal project to create the ultimate AI assistant tailored for personal system use.
 
 ---
 
-## ðŸ“„ License
+## 📄 License
 
 This is a personal project. All rights reserved by the author unless otherwise stated.
 
@@ -200,6 +200,6 @@ This is a personal project. All rights reserved by the author unless otherwise s
 
 <div align="center">
 
-â­ **If you find this project interesting, give it a star!** â­
+⭐ **If you find this project interesting, give it a star!** ⭐
 
 </div>
