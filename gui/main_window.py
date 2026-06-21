@@ -43,6 +43,8 @@ class MainWindow(QMainWindow):
         self.voice_thread.start()
         self.label.setText("Listening...")
 
+    
+
     def stop_voice(self):
         if self.voice_thread:
             self.voice_thread.stop()
@@ -60,3 +62,5 @@ class MainWindow(QMainWindow):
             self.label.setText("App opened")
         else:
             self.label.setText("Command not found")
+
+    
