@@ -6,6 +6,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from gui.particle_widget import ParticleWidget
+from gui.glass_panel import GlassPanel
+from gui.voice_ring import VoiceRing
+from gui.breathing_label import BreathingLabel
+
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt, QTimer
 
@@ -45,14 +50,16 @@ class MainWindow(QMainWindow):
         # Logo
         ####################################################
 
-        self.image_label = QLabel()
+        self.voice_ring = VoiceRing()
+
+        self.image_label = BreathingLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         pixmap = QPixmap("assets/logo/jaguar.png")
 
         pixmap = pixmap.scaled(
-            1320,
-            1320,
+            420,
+            420,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
@@ -85,7 +92,9 @@ class MainWindow(QMainWindow):
         # Layout
         ####################################################
 
-        layout = QVBoxLayout()
+        # layout = QVBoxLayout()
+        glass = GlassPanel()
+        layout=QVBoxLayout(glass)
 
         layout.addWidget(self.clock)
 
@@ -106,7 +115,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.stop_btn)
         layout.addWidget(self.exit_btn)
 
-        container = QWidget()
+        container = ParticleWidget()
+        
         container.setLayout(layout)
 
         self.setCentralWidget(container)

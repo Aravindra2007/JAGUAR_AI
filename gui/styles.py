@@ -1,6 +1,12 @@
 STYLE = """
 QMainWindow{
-    background-color:#050816;
+    background:#050816;
+}
+
+QWidget{
+    background:transparent;
+    color:white;
+    font-family:Segoe UI;
 }
 
 QLabel{
@@ -9,16 +15,25 @@ QLabel{
 }
 
 QPushButton{
-    background:#0B1F3A;
+
+    background:rgba(0,191,255,60);
+
+    border:2px solid rgb(0,191,255);
+
+    border-radius:18px;
+
     color:white;
-    border:2px solid #00BFFF;
-    border-radius:15px;
-    padding:10px;
-    font-size:16px;
+
+    font-size:18px;
+
+    padding:12px;
 }
 
 QPushButton:hover{
-    background:#00BFFF;
+
+    background:rgb(0,191,255);
+
     color:black;
+
 }
 """
