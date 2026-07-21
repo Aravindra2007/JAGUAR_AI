@@ -358,56 +358,6 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
     )
 
 
-# st.sidebar.divider()
-# with st.sidebar.expander("🧠 LLM settings", expanded=False):
-
-#     cfg = state.get_llm_config()
-
-#     llm_enabled = st.toggle("Enable LLM", value=cfg["enabled"])
-
-#     provider_options = ["OpenAI", "Claude (Anthropic)", "Ollama (local)","Gemini"]
-#     provider = st.selectbox(
-#         "Provider",
-#         provider_options,
-#         index=provider_options.index(cfg["provider"]) if cfg["provider"] in provider_options else 0,
-#     )
-
-#     if provider == "OpenAI":
-#         api_key = st.text_input("API key", value=cfg["api_key"], type="password")
-#         model = st.text_input("Model", value=cfg.get("model") or "gpt-4o-mini")
-#         ollama_host = cfg["ollama_host"]
-#     elif provider == "Claude (Anthropic)":
-#         api_key = st.text_input("Anthropic API key", value=cfg["api_key"], type="password")
-#         model = st.selectbox(
-#             "Model",
-#             ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
-#             index=0,
-#             help="Claude Mythos isn't available here - it's invite-only "
-#                  "(Project Glasswing). These are the public models.",
-#         )
-#         ollama_host = cfg["ollama_host"]
-#     elif provider == "Gemini":
-#         api_key = st.text_input("API key", value=cfg["api_key"],type="password")
-#         model = st.text_input("Model",value=cfg.get("model") or "gemini-3.5-flash")
-#         ollama_host = cfg["ollama_host"]
-#     else:
-#         api_key = cfg["api_key"]
-#         model = st.text_input("Model", value=cfg.get("model") or "llama3")
-#         ollama_host = st.text_input("Ollama host", value=cfg["ollama_host"])
-
-#     temperature = st.slider("Temperature", 0.0, 1.5, cfg["temperature"], 0.1)
-
-#     system_prompt = st.text_area("System prompt", value=cfg["system_prompt"])
-
-#     state.set_llm_config(
-#         enabled=llm_enabled,
-#         provider=provider,
-#         api_key=api_key,
-#         model=model,
-#         temperature=temperature,
-#         system_prompt=system_prompt,
-#         ollama_host=ollama_host,
-#     )
 
 # ---------------------------------------------------------------
 # AGENTS (new)
