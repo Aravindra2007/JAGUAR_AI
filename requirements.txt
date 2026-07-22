@@ -13,3 +13,6 @@ streamlit-autorefresh
 openai
 anthropic
 ollama
+
+gTTS
+playsound==1.2.2

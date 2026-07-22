@@ -7,6 +7,7 @@ from router import CommandRouter
 from listener import VoiceListener
 import agents
 import state
+import languages
 
 # ---------------------------------------------------------------
 # UI CONFIG
@@ -357,6 +358,22 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
         ollama_host=ollama_host,
     )
 
+st.sidebar.divider()
+st.sidebar.caption("🌐 Language")
+
+current_language = state.get_language()
+lang_options = languages.list_languages()
+
+selected_language = st.sidebar.selectbox(
+    "Assistant language",
+    lang_options,
+    index=lang_options.index(current_language) if current_language in lang_options else 0,
+    label_visibility="collapsed",
+)
+
+if selected_language != current_language:
+    state.set_language(selected_language)
+    st.rerun()
 
 
 # ---------------------------------------------------------------

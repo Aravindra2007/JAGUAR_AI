@@ -43,6 +43,20 @@ _llm_config = {
     "ollama_host": "",
 }
 
+DEFAULT_LANGUAGE = "English"
+_language = DEFAULT_LANGUAGE
+
+
+def set_language(language):
+    global _language
+    with _lock:
+        _language = language
+
+
+def get_language():
+    with _lock:
+        return _language
+
 
 def set_status(status):
     global _current_status

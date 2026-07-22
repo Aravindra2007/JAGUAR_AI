@@ -101,8 +101,22 @@ class CommandRouter:
         # Maker, Research Assistant, Wellness check-in, or general
         # fallback) based on the message, and layer its system prompt
         # on top of the user's own Jaguar persona.
+
+        # agent_key = agents.pick_agent(text)
+        # system_prompt = agents.system_prompt_for(agent_key, base_system_prompt)
+        # state.set_text(f"[{agents.AGENTS[agent_key]['label']}] thinking...")
         agent_key = agents.pick_agent(text)
         system_prompt = agents.system_prompt_for(agent_key, base_system_prompt)
+
+        language = state.get_language()
+        if language != "English":
+            system_prompt += (
+                f"\n\nRespond only in {language}, regardless of what "
+                "language this prompt or the user's message is written "
+                f"in. Do not mix in English unless the user explicitly "
+                f"asks a question in English."
+            )
+
         state.set_text(f"[{agents.AGENTS[agent_key]['label']}] thinking...")
 
         messages = [{"role": "system", "content": system_prompt}]

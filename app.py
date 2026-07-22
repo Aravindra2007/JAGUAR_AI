@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, jsonify
 from router import CommandRouter
 from listener import VoiceListener
 import state
+import languages
 
 app = Flask(__name__)
 
@@ -144,6 +145,20 @@ def start():
 
     return jsonify({"success": True})
 
+
+## Languages
+@app.route("/language", methods=["GET", "POST"])
+def language():
+    if request.method == "POST":
+        data = request.get_json() or {}
+        lang = data.get("language")
+        if lang in languages.list_languages():
+            state.set_language(lang)
+
+    return jsonify({
+        "language": state.get_language(),
+        "available": languages.list_languages(),
+    })
 
 # ---------------------------------
 # Stop Listening
