@@ -1,4 +1,3 @@
-
 import os
 import streamlit as st
 import base64
@@ -22,9 +21,6 @@ st.set_page_config(
 # ---------------------------------------------------------------
 # GLOBAL STYLES (Futuristic UI)
 # ---------------------------------------------------------------
-
-
-
 
 def set_bg(image_file):
     with open(image_file, "rb") as f:
