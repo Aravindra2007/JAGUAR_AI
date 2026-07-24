@@ -8,97 +8,106 @@ from listener import VoiceListener
 import agents
 import state
 import languages
+from datetime import datetime 
 
 # ---------------------------------------------------------------
 # UI CONFIG
 # ---------------------------------------------------------------
 st.set_page_config(
     page_title="Jaguar AI",
-    page_icon="🐆",
+    page_icon="icon.png",
     layout="centered",
 )
 
 # ---------------------------------------------------------------
 # GLOBAL STYLES (Futuristic UI)
 # ---------------------------------------------------------------
-st.markdown("""
-<style>
 
-/* Background */
-[data-testid="stAppViewContainer"] {
-    background: linear-gradient(135deg, #0a0f1c, #000000);
-    color: white;
-}
 
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background: #050a18;
-}
 
-/* Buttons */
-.stButton>button {
-    background: linear-gradient(90deg, #00FFFF, #007BFF);
-    color: black;
-    border-radius: 8px;
-    font-weight: bold;
-}
 
-/* Chat bubbles */
-[data-testid="stChatMessage"] {
-    background: rgba(0,255,255,0.05);
-    border-radius: 10px;
-    padding: 10px;
-}
+def set_bg(image_file):
+    with open(image_file, "rb") as f:
+        data = base64.b64encode(f.read()).decode()
 
-/* Typing animation */
-.typing {
-  display: inline-block;
-}
-.typing span {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin: 2px;
-  background: cyan;
-  border-radius: 50%;
-  animation: blink 1.4s infinite both;
-}
-.typing span:nth-child(2) {
-  animation-delay: .2s;
-}
-.typing span:nth-child(3) {
-  animation-delay: .4s;
-}
-@keyframes blink {
-  0% {opacity: .2;}
-  20% {opacity: 1;}
-  100% {opacity: .2;}
-}
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)),
+                              url("data:image/jpg;base64,{data}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
 
-/* Mic pulse */
-.mic {
-    width: 70px;
-    height: 70px;
-    border-radius: 50%;
-    background: #00FFFF;
-    margin: auto;
-    box-shadow: 0 0 0 rgba(0,255,255, 0.7);
-    animation: pulse 1.5s infinite;
-}
-@keyframes pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(0,255,255, 0.7);
-    }
-    70% {
-        box-shadow: 0 0 0 25px rgba(0,255,255, 0);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(0,255,255, 0);
-    }
-}
+        /* Hide default UI */
+        #MainMenu {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
+        header {{visibility: hidden;}}
 
-</style>
-""", unsafe_allow_html=True)
+        /* Glass effect container */
+        .block-container {{
+            backdrop-filter: blur(10px);
+        }}
+
+        /* Chat bubbles */
+        .stChatMessage {{
+            background: rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 0 10px rgba(0,255,255,0.2);
+        }}
+
+        /* Input box */
+        .stChatInput > div {{
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+        }}
+
+        /* Title glow */
+        h1 {{
+            text-align: center;
+            color: #00FFFF;
+            text-shadow: 0 0 20px #00FFFF;
+        }}
+
+        /* Typing cursor animation */
+        .typing {{
+            border-right: 2px solid #00FFFF;
+            animation: blink 1s infinite;
+        }}
+
+        @keyframes blink {{
+            0% {{ border-color: transparent; }}
+            50% {{ border-color: #00FFFF; }}
+            100% {{ border-color: transparent; }}
+        }}
+
+        /* Mic pulse animation */
+        .mic {{
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(0,255,255,0.2);
+            margin: 10px auto;
+            animation: pulse 1.5s infinite;
+        }}
+
+        @keyframes pulse {{
+            0% {{ transform: scale(1); opacity: 0.7; }}
+            50% {{ transform: scale(1.2); opacity: 1; }}
+            100% {{ transform: scale(1); opacity: 0.7; }}
+        }}
+
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# 👉 your JPG file
+set_bg("back.png")
 
 # ---------------------------------------------------------------
 # Sidebar Logo (Circle + Glow)
@@ -270,10 +279,13 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
         model = st.selectbox(
             "Gemini Model",
             [
+                "gemini-2.0-flash",
                 "gemini-3.5-flash",
                 "gemini-3.5-pro",
                 "gemini-2.5-flash",
-                "gemini-2.5-pro"
+                "gemini-2.5-pro",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro"
             ],
             index=0
         )
@@ -393,6 +405,35 @@ with st.sidebar.expander("🤖 Student agents", expanded=False):
 # MAIN CHAT
 # ---------------------------------------------------------------
 st.title("Jaguar AI Assistant")
+
+now = datetime.now()
+current_time = now.strftime("%I:%M %p")   # 12-hour format
+current_date = now.strftime("%A, %d %B %Y")
+
+st.markdown(
+    f"""
+    <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        padding:5px 10px;
+        margin-bottom:5px;
+        background: rgba(255,255,255,0.08);
+        border-radius:10px;
+        font-size:14px;
+        color:#00FFFF;
+        box-shadow:0 0 10px rgba(0,255,255,0.2);
+    ">
+        <span>🗓️ {current_date}</span>
+        <span>⏰ {current_time}</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+
+
 
 for entry in state.get_history():
     with st.chat_message("user"):
