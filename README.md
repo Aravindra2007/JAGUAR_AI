@@ -1,6 +1,20 @@
+<<<<<<< HEAD
 # 🐆 JAGUAR AI
 
 > A modular, voice-enabled personal AI assistant for your desktop — built with Python and PyQt6.
+=======
+# Jaguar AI
+
+**Jaguar** is a Python voice/text assistant that integrates with
+multiple AI models (OpenAI, Anthropic Claude, Google Gemini, and local
+Ollama models). It listens for spoken commands (or accepts typed ones),
+first checks a table of built-in actions — opening apps and websites,
+playing YouTube videos, searching the web, telling the time/date,
+shutting down or restarting the machine — and if nothing matches,
+**hands the text to the configured LLM** so it can hold a real
+conversation instead of just saying "I didn't understand." It talks
+back using text-to-speech.
+>>>>>>> cffc0614 (JAGUAR_AI)
 
 ---
 
@@ -30,7 +44,81 @@ JAGUAR AI is a fully personalized desktop AI assistant designed to run locally o
 
 ---
 
+<<<<<<< HEAD
 ## Project Structure
+=======
+## Requirements
+
+- Python 3.x
+- A working microphone (for voice mode)
+- Packages in `requirements.txt` (Flask, SpeechRecognition, pyttsx3,
+  pyautogui, pywhatkit, PyAudio, streamlit, streamlit-autorefresh,
+  openai, ollama)
+- An OpenAI API key, Anthropic API key, Google AI Studio key (if using
+  those providers) **or** [Ollama](https://ollama.com) running locally
+  with a pulled model (if using Ollama)
+
+> **Note:** Several built-in commands (Notepad/Calculator/Paint/CMD,
+> `shutdown`, `restart`) use Windows-specific calls, so this project is
+> built primarily for **Windows**.
+
+## Installation
+
+```bash
+git clone https://github.com/Aravindra2007/JAGUAR_AK.git
+cd JAGUAR_AK
+pip install -r requirements.txt
+```
+
+On Windows, `PyAudio` may need a prebuilt wheel if `pip install` fails —
+install via `pipwin install pyaudio` or a matching `.whl`.
+
+## Usage
+
+**Streamlit GUI (recommended — includes the LLM settings panel):**
+
+```bash
+streamlit run streamlit_app.py
+```
+
+**Flask GUI:**
+
+```bash
+python main.py
+```
+
+Either way, from the GUI you can:
+
+- Type a command, or just chat — anything that isn't a recognized
+  command goes straight to the LLM
+- Click **Start** to enable voice listening (say a command or ask a
+  question, then pause) — voice input goes through the exact same
+  pipeline as typed input, including the LLM fallback
+- Click **Stop** to disable the microphone
+- Mute/unmute spoken responses
+- View or clear conversation history
+- (Streamlit) open **🧠 LLM settings** in the sidebar to pick a
+  provider (OpenAI / Claude / Gemini / Ollama), model, temperature,
+  and system prompt
+
+Built-in commands still work exactly as before:
+
+- `open google` / `open youtube` / `open github`
+- `play <song name>` (plays on YouTube)
+- `search <query>` / `search youtube for <query>`
+- `open notepad` / `open calculator` / `open paint` / `open vs code`
+- `time` / `date`
+- `shutdown` / `restart`
+- `exit` / `quit` / `goodbye`
+- `stop listening`, `go idle`, `sleep`, or `stop` (voice-only, pauses
+  the mic)
+
+Anything else — `"what's the capital of France"`,
+`"summarize the plot of dune"`, `"why is the sky blue"` — is sent to
+the configured LLM and the reply is spoken back (unless muted).
+
+## Project structure
+>>>>>>> cffc0614 (JAGUAR_AI)
 
 ```
 JAGUAR_AI/
@@ -168,4 +256,8 @@ JAGUAR is built to be extensible. You can:
 
 ## License
 
+<<<<<<< HEAD
 This project is currently unlicensed. All rights reserved by the author unless otherwise specified.
+=======
+Released under the [MIT License](LICENSE).
+>>>>>>> cffc0614 (JAGUAR_AI)

@@ -11,6 +11,7 @@
 #   - whichever LLM provider/model/key is set in the GUI is what the
 #     router falls back to, whether the text came from typing or speech
 
+import os
 import threading
 
 _lock = threading.Lock()
@@ -35,13 +36,23 @@ DEFAULT_SYSTEM_PROMPT = (
 
 _llm_config = {
     "enabled": True,
-    "provider": "OpenAI",          # "OpenAI", "Claude (Anthropic)", or "Ollama (local)"
+    "provider": "OpenAI",          # "OpenAI", "Claude (Anthropic)", "Gemini", or "Ollama (local)"
     "api_key": "",
     "model": "gpt-4o-mini",
     "temperature": 0.7,
     "system_prompt": DEFAULT_SYSTEM_PROMPT,
     "ollama_host": "",
+    # --- Tool-use (Phase 1, Anthropic only) ---
+    "tools_enabled": False,
+    "workspace_dir": os.path.expanduser("~"),
+    "reminders_path": "reminders.json",
 }
+
+# Pending confirmation envelopes keyed by uuid token. Both UI surfaces
+# (Streamlit button, voice listener) need to find a pending action to
+# either approve or deny; the executor stores one here until the user
+# responds, then pops it.
+_pending_confirmations = {}
 
 DEFAULT_LANGUAGE = "English"
 _language = DEFAULT_LANGUAGE
@@ -106,7 +117,8 @@ def is_muted():
 
 def set_llm_config(**kwargs):
     """Update one or more LLM settings (provider, api_key, model,
-    temperature, system_prompt, ollama_host, enabled)."""
+    temperature, system_prompt, ollama_host, enabled, tools_enabled,
+    workspace_dir, reminders_path)."""
     with _lock:
         _llm_config.update(kwargs)
 
@@ -114,3 +126,23 @@ def set_llm_config(**kwargs):
 def get_llm_config():
     with _lock:
         return dict(_llm_config)
+
+
+# ---------------------------------
+# Pending confirmations (tool-use)
+# ---------------------------------
+
+def push_pending_confirmation(token, envelope):
+    with _lock:
+        _pending_confirmations[token] = envelope
+
+
+def pop_pending_confirmation(token):
+    with _lock:
+        return _pending_confirmations.pop(token, None)
+
+
+def peek_pending_confirmation(token):
+    with _lock:
+        envelope = _pending_confirmations.get(token)
+        return dict(envelope) if envelope is not None else None

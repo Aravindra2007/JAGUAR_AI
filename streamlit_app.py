@@ -234,6 +234,14 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
         )
     )
 
+    # --- Phase 1: tool-use fields ---
+    # These need to be in scope for ALL providers, since
+    # state.set_llm_config() always writes them. The Claude branch
+    # below overrides these with actual UI controls (toggle + text
+    # input); for other providers we just keep the saved defaults.
+    tools_enabled = cfg.get("tools_enabled", False)
+    workspace_dir = cfg.get("workspace_dir", "~")
+
     # ===========================================================
     # OPENAI
     # ===========================================================
@@ -275,13 +283,8 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
         model = st.selectbox(
             "Gemini Model",
             [
-                "gemini-2.0-flash",
-                "gemini-3.5-flash",
-                "gemini-3.5-pro",
                 "gemini-2.5-flash",
                 "gemini-2.5-pro",
-                "gemini-1.5-flash",
-                "gemini-1.5-pro"
             ],
             index=0
         )
@@ -304,17 +307,39 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
             "Claude Model",
             [
                 "claude-sonnet-5",
-                "claude-opus-4-8",
-                "claude-haiku-4-5-20251001"
+                "claude-opus-5",
+                "claude-haiku-4-5-20251001",
             ],
             index=0,
             help=(
-                "Claude Mythos is not publicly available. "
-                "It is invite-only."
+                "Pick a current Anthropic frontier model. "
+                "Sonnet = balanced, Opus = strongest, Haiku = fastest/cheapest."
             )
         )
 
         ollama_host = cfg.get("ollama_host", "")
+
+        # --- Phase 1: tool-use controls (Anthropic only) ---
+        st.markdown("---")
+        st.markdown("**🛠️ Tool-use (Phase 1)**")
+        tools_enabled = st.toggle(
+            "Enable tool-use (Claude only)",
+            value=cfg.get("tools_enabled", False),
+            help=(
+                "Allows Claude to call local PC tools (open apps, read/write "
+                "files in the workspace, run a small set of shell commands, "
+                "set reminders). Mutating actions will ask for your approval."
+            ),
+        )
+        workspace_dir = st.text_input(
+            "Workspace folder (tool-use sandbox)",
+            value=cfg.get("workspace_dir", "~"),
+            help=(
+                "Filesystem root for read_file / write_file / list_directory. "
+                "Paths outside this folder are refused. Use ~ for your home "
+                "directory or pick a project folder."
+            ),
+        )
 
     # ===========================================================
     # OLLAMA
@@ -334,6 +359,9 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
             "Ollama Host",
             value=cfg.get("ollama_host") or "http://localhost:11434"
         )
+
+        # tools_enabled / workspace_dir are defined above so they're
+        # in scope for all providers.
 
     # ===========================================================
     # COMMON SETTINGS
@@ -364,6 +392,8 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
         temperature=temperature,
         system_prompt=system_prompt,
         ollama_host=ollama_host,
+        tools_enabled=tools_enabled,
+        workspace_dir=workspace_dir,
     )
 
 st.sidebar.divider()
@@ -436,7 +466,15 @@ for entry in state.get_history():
         st.write(entry["user"])
 
     with st.chat_message("assistant"):
-        st.write(entry["assistant"])
+        assistant_text = entry["assistant"]
+        # Defensive: history should only contain strings, but if an
+        # earlier code path somehow stored an envelope dict, render a
+        # one-liner instead of crashing.
+        if isinstance(assistant_text, dict):
+            envelope = assistant_text.get("envelope") or {}
+            st.write(f"⚠️ Confirmation requested: {envelope.get('prompt', 'approve or deny')}")
+        else:
+            st.write(assistant_text)
 
 prompt = st.chat_input("Type or speak...")
 
@@ -458,6 +496,45 @@ if prompt:
     response = router.process(text)
 
     typing_placeholder.empty()
+
+    # --- Phase 1: tool-use confirmation branch ---
+    if isinstance(response, dict) and response.get("type") == "needs_confirmation":
+        envelope = response.get("envelope") or {}
+        token = envelope.get("token", "")
+        prompt_text = envelope.get("prompt", "Confirm this action?")
+
+        state.set_status("Awaiting confirmation")
+        state.set_text(f"[Awaiting confirmation] {prompt_text}")
+
+        with st.chat_message("assistant"):
+            st.markdown("⚠️ **Confirm action**")
+            st.markdown(f"_{prompt_text}_")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ Approve", key=f"confirm_yes_{token}"):
+                    try:
+                        result = router.process_with_confirmation(token, "yes")
+                    except Exception as e:
+                        result = f"Sorry Sir, something went wrong running that action: {e}"
+                    state.set_status("Idle")
+                    state.set_text(result)
+                    state.add_history(text, result)
+                    with st.chat_message("assistant"):
+                        st.write(result)
+                    st.rerun()
+            with col_no:
+                if st.button("❌ Deny", key=f"confirm_no_{token}"):
+                    result = router.process_with_confirmation(token, "no")
+                    state.set_status("Idle")
+                    state.set_text(result)
+                    state.add_history(text, result)
+                    with st.chat_message("assistant"):
+                        st.write(result)
+                    st.rerun()
+        # Stop here so we don't render the envelope dict as if it were
+        # text. The Approve/Deny buttons handle the next turn.
+        st.stop()
+    # --- end confirmation branch ---
 
     state.set_status("Idle")
     state.set_text(response)

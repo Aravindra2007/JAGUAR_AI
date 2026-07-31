@@ -45,9 +45,14 @@ def command():
     response = router.process(text)
 
     state.set_status("Idle")
-    state.set_text(response)
-    state.add_history(text, response)
+    state.set_text(response if isinstance(response, str) else "Awaiting confirmation.")
+    if isinstance(response, str):
+        state.add_history(text, response)
 
+    # `response` may be either a string (text reply) or a dict shaped
+    # like {"type": "needs_confirmation", "envelope": {...}}. The Flask
+    # template (when present) is responsible for rendering the envelope
+    # as Approve/Deny controls and posting to /confirm with the token.
     return jsonify({
         "response": response
     })
@@ -170,6 +175,29 @@ def stop():
     listener.stop_listening()
 
     return jsonify({"success": True})
+
+
+# ---------------------------------
+# Confirm a pending tool action
+# ---------------------------------
+# Called from the Flask GUI's Approve/Deny buttons (and any other
+# client that has a token from a prior /command response). The router
+# looks up the action by token and either runs it or cancels it.
+
+@app.route("/confirm", methods=["POST"])
+def confirm():
+    data = request.get_json() or {}
+    token = data.get("token", "")
+    decision = data.get("decision", "")
+
+    if not token:
+        return jsonify({"response": "Missing token."}), 400
+
+    response = router.process_with_confirmation(token, decision)
+    state.add_history("[tool action]", response)
+    state.set_text(response)
+
+    return jsonify({"response": response})
 
 
 # ---------------------------------

@@ -1,7 +1,9 @@
 from commands import Commands
-from llm_client import ask, LLMError
+from llm_client import ask, ask_claude_with_tools, LLMError
 import agents
 import state
+from tool_executor import ToolExecutor
+from tools import TOOLS
 
 
 class CommandRouter:
@@ -102,9 +104,6 @@ class CommandRouter:
         # fallback) based on the message, and layer its system prompt
         # on top of the user's own Jaguar persona.
 
-        # agent_key = agents.pick_agent(text)
-        # system_prompt = agents.system_prompt_for(agent_key, base_system_prompt)
-        # state.set_text(f"[{agents.AGENTS[agent_key]['label']}] thinking...")
         agent_key = agents.pick_agent(text)
         system_prompt = agents.system_prompt_for(agent_key, base_system_prompt)
 
@@ -129,6 +128,40 @@ class CommandRouter:
 
         messages.append({"role": "user", "content": text})
 
+        # --- Phase 1: Claude tool-use path ---
+        # Only fires when the user has explicitly enabled tool-use and
+        # the configured provider is Anthropic. OpenAI/Gemini/Ollama
+        # fall through to the existing ask() path.
+        if (
+            provider == "Claude (Anthropic)"
+            and cfg.get("tools_enabled", False)
+            and api_key
+        ):
+            workspace_dir = cfg.get("workspace_dir", "") or ""
+            executor = ToolExecutor(workspace_dir=workspace_dir)
+            try:
+                result = ask_claude_with_tools(
+                    messages=messages,
+                    api_key=api_key,
+                    model=model or "claude-sonnet-5",
+                    tools=TOOLS,
+                    executor=executor,
+                    temperature=temperature,
+                )
+                if result.get("needs_confirmation"):
+                    envelope = result["envelope"]
+                    state.set_text("[Awaiting confirmation]")
+                    return envelope
+                text_reply = (result.get("text") or "").strip()
+                if text_reply:
+                    return text_reply
+                return "Done."
+            except LLMError as e:
+                return f"Sorry Sir, I couldn't reach the language model: {e}"
+            except Exception as e:
+                return f"Sorry Sir, something went wrong talking to the model: {e}"
+
+        # --- Existing chat path (OpenAI / Gemini / Ollama / no-tools Claude) ---
         try:
             reply = ask(
                 provider,
@@ -146,3 +179,23 @@ class CommandRouter:
 
         except Exception as e:
             return f"Sorry Sir, something went wrong talking to the model: {e}"
+
+    # -------------------------
+    # Confirmation resolution (Phase 1, tool-use)
+    # -------------------------
+
+    def process_with_confirmation(self, token, decision):
+        """Resolve a pending tool-use confirmation envelope.
+
+        Returns the assistant's plain-text reply (after either executing
+        the action on 'yes' or cancelling on 'no'). UI surfaces call this
+        from the Approve/Deny buttons and from the voice listener's
+        yes/no follow-up.
+        """
+        cfg = state.get_llm_config()
+        workspace_dir = cfg.get("workspace_dir", "") or ""
+        executor = ToolExecutor(workspace_dir=workspace_dir)
+        try:
+            return executor.execute_confirmed(token, decision)
+        except Exception as e:
+            return f"Sorry Sir, something went wrong running that action: {e}"
