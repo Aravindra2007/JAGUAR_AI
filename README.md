@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🐆 JAGUAR AI
 
 > A modular, voice-enabled personal AI assistant for your desktop — built with Python and PyQt6.
@@ -44,7 +43,6 @@ JAGUAR AI is a fully personalized desktop AI assistant designed to run locally o
 
 ---
 
-<<<<<<< HEAD
 ## Project Structure
 =======
 ## Requirements
@@ -118,7 +116,6 @@ Anything else — `"what's the capital of France"`,
 the configured LLM and the reply is spoken back (unless muted).
 
 ## Project structure
->>>>>>> cffc0614 (JAGUAR_AI)
 
 ```
 JAGUAR_AI/
@@ -256,8 +253,7 @@ JAGUAR is built to be extensible. You can:
 
 ## License
 
-<<<<<<< HEAD
 This project is currently unlicensed. All rights reserved by the author unless otherwise specified.
 =======
 Released under the [MIT License](LICENSE).
->>>>>>> cffc0614 (JAGUAR_AI)
+
