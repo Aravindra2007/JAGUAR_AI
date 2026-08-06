@@ -13,7 +13,6 @@ shutting down or restarting the machine — and if nothing matches,
 **hands the text to the configured LLM** so it can hold a real
 conversation instead of just saying "I didn't understand." It talks
 back using text-to-speech.
->>>>>>> cffc0614 (JAGUAR_AI)
 
 ---
 
