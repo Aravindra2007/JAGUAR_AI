@@ -1,0 +1,31 @@
+Flask
+SpeechRecognition
+pyttsx3
+pyautogui
+pywhatkit
+PyAudio
+
+# --- Streamlit frontend ---
+streamlit
+streamlit-autorefresh
+
+# --- LLM fallback (router.py sends unmatched commands here) ---
+openai
+anthropic
+ollama
+google-generativeai
+
+# --- Text-to-speech ---
+gTTS
+pygame            # replaces playsound: needed so Stop can interrupt gTTS playback mid-clip
+
+# --- MySQL + accounts ---
+PyMySQL
+flask-login
+python-dotenv
+
+# --- File upload reading (docs/images for tasking) ---
+PyPDF2
+python-docx
+pytesseract       # optional OCR for images; also requires the Tesseract engine installed on the OS
+Pillow

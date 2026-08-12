@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jaguar AI</title>
+<link rel="icon" href="{{ url_for('static', filename='icon.png') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060a10; --panel:#0d141d; --panel-2:#0a1017; --panel-border:#1c2733;
+    --cyan:#20e6d7; --cyan-dim:#12564f; --amber:#ffb020;
+    --text:#e7eef4; --muted:#7f93a3; --danger:#ff5c72;
+  }
+  *{box-sizing:border-box;}
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family:'Inter',sans-serif; color:var(--text); background:var(--bg);
+    display:flex; overflow:hidden;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    width:280px; min-width:280px; background:var(--panel); border-right:1px solid var(--panel-border);
+    display:flex; flex-direction:column; padding:20px 16px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .brand img{ width:38px; height:38px; border-radius:50%; box-shadow:0 0 16px rgba(32,230,215,0.4); }
+  .brand h1{ font-family:'Orbitron',sans-serif; font-size:16px; letter-spacing:1.5px; margin:0; }
+  .brand span{ color:var(--cyan); }
+
+  .status-card{
+    background:var(--panel-2); border:1px solid var(--panel-border); border-radius:12px;
+    padding:14px; margin-bottom:16px;
+  }
+  .status-row{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--muted); flex-shrink:0; }
+  .dot.idle{ background:#4caf7d; }
+  .dot.listening{ background:var(--cyan); box-shadow:0 0 10px var(--cyan); animation:pulse 1.2s infinite; }
+  .dot.processing{ background:var(--amber); animation:pulse 1s infinite; }
+  .dot.speaking{ background:#ff8fb0; animation:pulse 0.9s infinite; }
+  .dot.offline{ background:var(--danger); }
+  @keyframes pulse{ 0%{opacity:.5;transform:scale(1);} 50%{opacity:1;transform:scale(1.3);} 100%{opacity:.5;transform:scale(1);} }
+  #status-text{ margin-top:8px; font-size:12px; color:var(--text); line-height:1.4; word-break:break-word; }
+
+  .btn-row{ display:flex; gap:8px; margin-bottom:10px; }
+  button.ctl{
+    flex:1; padding:9px 8px; border-radius:9px; border:1px solid var(--panel-border);
+    background:#0f1720; color:var(--text); font-size:12.5px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px; transition:all .15s;
+  }
+  button.ctl:hover{ border-color:var(--cyan); color:var(--cyan); }
+  button.ctl.active{ background:linear-gradient(90deg, var(--cyan), #17b5a8); color:#04141b; border-color:transparent; }
+  button.ctl.danger:hover{ border-color:var(--danger); color:var(--danger); }
+
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--muted); margin:10px 2px; }
+  .switch{ position:relative; width:38px; height:20px; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .slider{ position:absolute; inset:0; background:#22303c; border-radius:20px; cursor:pointer; transition:.2s; }
+  .slider::before{ content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+  input:checked + .slider{ background:var(--cyan); }
+  input:checked + .slider::before{ transform:translateX(18px); }
+
+  select#lang-select{
+    width:100%; padding:8px 10px; border-radius:9px; border:1px solid var(--panel-border);
+    background:#0f1720; color:var(--text); font-size:12.5px; margin-top:6px;
+  }
+
+  .sidebar-section-label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:18px 0 8px; }
+
+  .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid var(--panel-border); }
+  .user-row{ display:flex; align-items:center; gap:10px; font-size:13px; }
+  .user-avatar{
+    width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg, var(--cyan), var(--amber));
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:#04141b; font-size:13px;
+  }
+  .user-row a{ margin-left:auto; color:var(--muted); text-decoration:none; font-size:12px; }
+  .user-row a:hover{ color:var(--danger); }
+
+  /* ---------- Main chat ---------- */
+  .main{ flex:1; display:flex; flex-direction:column; height:100%; position:relative; }
+  .topbar{
+    padding:16px 28px; border-bottom:1px solid var(--panel-border);
+    display:flex; align-items:center; justify-content:space-between;
+    background:linear-gradient(180deg, rgba(13,20,29,0.6), transparent);
+  }
+  .topbar h2{ font-family:'Orbitron',sans-serif; font-size:15px; letter-spacing:1px; margin:0; color:var(--text); }
+  .topbar .sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+
+  /* .chat-scroll{ flex:1; overflow-y:auto; padding:24px 28px; } */
+  .chat-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+
+    /* 🔥 ADD THIS */
+    background: linear-gradient(rgba(6,10,16,0.85), rgba(6,10,16,0.95)),
+                url("{{ url_for('static', filename='back.png') }}");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+  }
+  .chat-scroll::-webkit-scrollbar{ width:8px; }
+  .chat-scroll::-webkit-scrollbar-thumb{ background:#1c2733; border-radius:8px; }
+
+  .empty-state{ height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--muted); text-align:center; gap:10px; }
+  .empty-state img{ width:72px; opacity:0.5; }
+
+  .msg{ max-width:720px; margin:0 auto 18px; display:flex; gap:12px; }
+  .msg.user{ flex-direction:row-reverse; }
+  .msg .bubble-avatar{
+    width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700;
+  }
+  .msg.user .bubble-avatar{ background:linear-gradient(135deg, var(--amber), #c97e10); color:#1a1005; }
+  .msg.assistant .bubble-avatar{ background:linear-gradient(135deg, var(--cyan), #0c8f84); color:#04141b; }
+  .bubble{
+    padding:12px 15px; border-radius:14px; font-size:14.5px; line-height:1.55; white-space:pre-wrap; word-wrap:break-word;
+  }
+  
+  .msg.assistant .bubble,
+  .msg.user .bubble {
+    backdrop-filter: blur(6px);
+    background: rgba(13, 20, 29, 0.7);
+  }
+  .bubble-avatar img {
+    box-shadow: 0 0 10px rgba(32,230,215,0.6);
+  }
+  /* .msg.user .bubble{ background:#182531; border:1px solid #23323f; border-top-right-radius:4px; }
+  .msg.assistant .bubble{ background:var(--panel); border:1px solid var(--panel-border); border-top-left-radius:4px; } */
+
+  .confirm-card{
+    max-width:720px; margin:0 auto 18px; margin-left:42px;
+    background:rgba(255,176,32,0.07); border:1px solid rgba(255,176,32,0.35);
+    border-radius:12px; padding:14px 16px;
+  }
+  .confirm-card .label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--amber); margin-bottom:6px; }
+  .confirm-card .prompt{ font-size:14px; margin-bottom:12px; }
+  .confirm-actions{ display:flex; gap:10px; }
+  .confirm-actions button{
+    padding:8px 16px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .confirm-actions .approve{ background:var(--cyan); color:#04141b; }
+  .confirm-actions .deny{ background:#2a1a1e; color:#ff8fa0; border:1px solid rgba(255,92,114,0.4) !important; }
+
+  .attach-chip{
+    max-width:720px; margin:0 auto 10px; margin-left:42px;
+    display:inline-flex; align-items:center; gap:8px; background:rgba(32,230,215,0.08);
+    border:1px solid rgba(32,230,215,0.3); color:var(--cyan); border-radius:20px; padding:6px 14px; font-size:12.5px;
+  }
+
+  .composer{ padding:18px 28px 22px; border-top:1px solid var(--panel-border); }
+  .composer-inner{ max-width:760px; margin:0 auto; }
+  .input-row{
+    display:flex; align-items:flex-end; gap:8px; background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:16px; padding:8px 8px 8px 14px;
+  }
+  .input-row:focus-within{ border-color:var(--cyan); box-shadow:0 0 0 3px rgba(32,230,215,0.1); }
+  #text-input{
+    flex:1; border:none; background:transparent; color:var(--text); font-size:14.5px; resize:none;
+    max-height:140px; padding:8px 0; font-family:'Inter',sans-serif; line-height:1.4;
+  }
+  #text-input:focus{ outline:none; }
+  .icon-btn{
+    width:38px; height:38px; border-radius:10px; border:none; background:#0f1720; color:var(--muted);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; transition:all .15s;
+  }
+  .icon-btn:hover{ color:var(--cyan); background:#132029; }
+  .icon-btn.send{ background:linear-gradient(90deg, var(--cyan), #17b5a8); color:#04141b; }
+  .icon-btn.send:hover{ transform:translateY(-1px); }
+  .composer-hint{ font-size:11px; color:var(--muted); text-align:center; margin-top:8px; }
+  #file-input{ display:none; }
+
+  /* FULL SCREEN OVERLAY */
+  #ai-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6,10,16,0.85);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.3s ease;
+  }
+
+  .hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* BOX */
+  .overlay-box {
+    text-align: center;
+    color: #20e6d7;
+    font-family: 'Orbitron', sans-serif;
+  }
+
+  /* ICON */
+  #overlay-icon {
+    font-size: 50px;
+    margin-bottom: 15px;
+  }
+
+  /* TEXT */
+  #overlay-text {
+    font-size: 16px;
+    letter-spacing: 2px;
+  }
+
+  /* PULSE ANIMATION */
+  .pulse-ring {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    position: absolute;
+    border: 2px solid rgba(32,230,215,0.6);
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: scale(0.8);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+</style>
+</head>
+<!-- ================= LLM CONFIG MODAL ================= -->
+<div id="llm-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:999; align-items:center; justify-content:center;">
+  <div style="
+      width:420px;
+      background:#0d141d;
+      border:1px solid #1c2733;
+      border-radius:14px;
+      padding:20px;
+      box-shadow:0 0 40px rgba(32,230,215,0.3);
+  ">
+    <h3 style="margin-top:0; color:#20e6d7;">🧠 LLM Configuration</h3>
+
+    <!-- Provider -->
+    <label style="font-size:12px; color:#7f93a3;">Provider</label>
+    <select id="llm-provider" style="width:100%; margin:6px 0 12px; padding:8px; border-radius:8px; background:#0f1720; color:white;">
+      <option>OpenAI</option>
+      <option>Gemini</option>
+      <option>Claude</option>
+      <option>Ollama</option>
+    </select>
+
+    <!-- Model -->
+    <label style="font-size:12px; color:#7f93a3;">Model</label>
+    <select id="llm-model" style="width:100%; margin:6px 0 12px; padding:8px; border-radius:8px; background:#0f1720; color:white;"></select>
+
+    <!-- API -->
+    <label style="font-size:12px; color:#7f93a3;">API Key</label>
+    <input id="llm-api" type="password" placeholder="Enter API key"
+      style="width:100%; margin:6px 0 16px; padding:8px; border-radius:8px; background:#0f1720; color:white; border:1px solid #1c2733;" />
+
+    <!-- Buttons -->
+    <div style="display:flex; gap:10px;">
+      <button id="save-llm" class="ctl active" style="flex:1;">Save</button>
+      <button id="close-llm" class="ctl" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+<div id="ai-overlay" class="hidden">
+  <div class="overlay-box">
+    <div class="pulse-ring"></div>
+    <div id="overlay-icon">🎤</div>
+    <p id="overlay-text">Listening...</p>
+  </div>
+</div>
+<body>
+
+  <!-- ================= SIDEBAR ================= -->
+  <div class="sidebar">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='icon.png') }}" alt="Jaguar AI">
+      <h1>JAGUAR<span> AI</span></h1>
+    </div>
+
+    <div class="status-card">
+      <div class="status-row"><span class="dot idle" id="status-dot"></span><span id="status-label">Idle</span></div>
+      <div id="status-text">Welcome to Jaguar AI.</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="ctl" id="btn-start" title="Start voice listening">🎙️ Start</button>
+      <button class="ctl danger" id="btn-stop" title="Stop listening">⏹ Stop</button>
+    </div>
+    <div class="btn-row">
+      <button class="ctl danger" id="btn-stop-speaking" title="Interrupt Jaguar mid-sentence">🔇 Stop speaking</button>
+    </div>
+
+    <div class="toggle-row">
+      <span>Mute voice replies</span>
+      <label class="switch"><input type="checkbox" id="mute-toggle"><span class="slider"></span></label>
+    </div>
+
+    <div class="sidebar-section-label">Language</div>
+    <select id="lang-select">
+      {% for lang in languages %}
+      <option value="{{ lang }}">{{ lang }}</option>
+      {% endfor %}
+    </select>
+
+    <div class="sidebar-section-label">Session</div>
+    <button class="ctl" id="btn-llm-config" style="width:100%;">🧠 LLM Configuration</button>
+    <button class="ctl" id="btn-clear" style="width:100%;">🗑️ Clear conversation</button>
+    
+
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <div class="user-avatar">{{ (full_name or username)[0]|upper }}</div>
+        <div>{{ full_name or username }}</div>
+        <a href="{{ url_for('auth.logout') }}">Log out</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MAIN ================= -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h2>JAGUAR Assistant</h2>
+        <div class="sub">Ask anything, upload notes to summarize, or say "Hey Jaguar" once listening is on.</div>
+      </div>
+    </div>
+
+    <div class="chat-scroll" id="chat-scroll">
+      <div class="empty-state" id="empty-state">
+        <!-- <img src="{{ url_for('static', filename='back.png') }}" alt=""> -->
+        <!-- <div>Ask a question, paste your notes, or upload a file to get started.</div> -->
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="composer-inner">
+        <div class="input-row">
+          <button class="icon-btn" id="btn-attach" title="Attach a file or image">📎</button>
+          <textarea id="text-input" rows="1" placeholder="Message Jaguar AI..."></textarea>
+          <button class="icon-btn send" id="btn-send" title="Send">➤</button>
+        </div>
+        <div class="composer-hint">Jaguar can read PDFs, Word docs, and images you attach — ask it to summarize or quiz you on them.</div>
+      </div>
+    </div>
+    <input type="file" id="file-input" accept=".txt,.md,.csv,.log,.json,.pdf,.docx,.png,.jpg,.jpeg,.bmp,.gif,.webp">
+  </div>
+
+<script>
+const chatScroll = document.getElementById('chat-scroll');
+const emptyState = document.getElementById('empty-state');
+const textInput = document.getElementById('text-input');
+
+function scrollToBottom(){ chatScroll.scrollTop = chatScroll.scrollHeight; }
+
+function addMessage(role, text){
+  emptyState.style.display = 'none';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + role;
+  const avatar = document.createElement('div');
+  avatar.className = 'bubble-avatar';
+  // avatar.textContent = role === 'user' ? 'U' : '🐆';
+  if (role === 'user') {
+    avatar.textContent = 'U';
+  } else {
+    const img = document.createElement('img');
+    img.src = "/static/icon.png"; // your generated icon
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.borderRadius = "50%";
+    avatar.appendChild(img);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  chatScroll.appendChild(wrap);
+  scrollToBottom();
+}
+
+function addAttachmentChip(filename){
+  emptyState.style.display = 'none';
+  const chip = document.createElement('div');
+  chip.className = 'attach-chip';
+  chip.textContent = '📎 ' + filename + ' attached — ask a question about it';
+  chatScroll.appendChild(chip);
+  scrollToBottom();
+}
+
+function addConfirmCard(prompt, token){
+  emptyState.style.display = 'none';
+  const card = document.createElement('div');
+  card.className = 'confirm-card';
+  card.innerHTML = `
+    <div class="label">⚠ Confirmation needed</div>
+    <div class="prompt">${prompt}</div>
+    <div class="confirm-actions">
+      <button class="approve">Approve</button>
+      <button class="deny">Deny</button>
+    </div>`;
+  card.querySelector('.approve').onclick = () => resolveConfirm(token, 'yes', card);
+  card.querySelector('.deny').onclick = () => resolveConfirm(token, 'no', card);
+  chatScroll.appendChild(card);
+  scrollToBottom();
+}
+
+async function resolveConfirm(token, decision, card){
+  card.querySelectorAll('button').forEach(b => b.disabled = true);
+  const res = await fetch('/confirm', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({token, decision})
+  });
+  const data = await res.json();
+  card.remove();
+  addMessage('assistant', data.response);
+}
+
+async function loadHistory(){
+  const res = await fetch('/history');
+  const rows = await res.json();
+  rows.forEach(r => {
+    addMessage('user', r.user);
+    addMessage('assistant', typeof r.assistant === 'string' ? r.assistant : '[awaiting confirmation]');
+  });
+}
+
+async function sendText(){
+  const text = textInput.value.trim();
+  if(!text) return;
+  addMessage('user', text);
+  textInput.value = '';
+  textInput.style.height = 'auto';
+
+  const res = await fetch('/command', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text})
+  });
+  const data = await res.json();
+  const response = data.response;
+
+  if(response && typeof response === 'object' && response.type === 'needs_confirmation'){
+    const env = response.envelope || {};
+    addConfirmCard(env.prompt || 'Confirm this action?', env.token);
+  } else {
+    addMessage('assistant', response);
+  }
+}
+
+document.getElementById('btn-send').onclick = sendText;
+textInput.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendText(); }
+});
+textInput.addEventListener('input', () => {
+  textInput.style.height = 'auto';
+  textInput.style.height = Math.min(textInput.scrollHeight, 140) + 'px';
+});
+
+// ---------------- Upload ----------------
+const fileInput = document.getElementById('file-input');
+document.getElementById('btn-attach').onclick = () => fileInput.click();
+
+fileInput.addEventListener('change', async () => {
+  if(!fileInput.files.length) return;
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+
+  addAttachmentChip(file.name + ' (uploading...)');
+  const res = await fetch('/upload', { method:'POST', body: formData });
+  const data = await res.json();
+  chatScroll.lastElementChild.remove();
+
+  if(data.success){
+    addAttachmentChip(data.filename);
+    textInput.value = 'Please read the file I just attached and ';
+    textInput.focus();
+  } else {
+    addMessage('assistant', 'Upload failed: ' + (data.error || 'unknown error'));
+  }
+  fileInput.value = '';
+});
+
+// ---------------- Voice controls ----------------
+document.getElementById('btn-start').onclick = async () => {
+  await fetch('/start', {method:'POST'});
+  document.getElementById('btn-start').classList.add('active');
+};
+document.getElementById('btn-stop').onclick = async () => {
+  await fetch('/stop', {method:'POST'});
+  document.getElementById('btn-start').classList.remove('active');
+};
+document.getElementById('btn-stop-speaking').onclick = async () => {
+  await fetch('/stop-speaking', {method:'POST'});
+};
+
+document.getElementById('mute-toggle').onchange = async (e) => {
+  await fetch('/mute', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({muted: e.target.checked})
+  });
+};
+
+document.getElementById('lang-select').onchange = async (e) => {
+  await fetch('/language', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({language: e.target.value})
+  });
+};
+
+document.getElementById('btn-clear').onclick = async () => {
+  await fetch('/clear', {method:'POST'});
+  document.querySelectorAll('.msg, .confirm-card, .attach-chip').forEach(el => el.remove());
+  emptyState.style.display = 'flex';
+};
+
+// ---------------- Status polling ----------------
+const dot = document.getElementById('status-dot');
+const label = document.getElementById('status-label');
+const statusText = document.getElementById('status-text');
+
+function statusClass(status, speaking){
+  if(speaking) return 'speaking';
+  if(status === 'Listening...') return 'listening';
+  if(status === 'Processing...' || (status || '').startsWith('Awaiting')) return 'processing';
+  if(status === 'Offline' || status === 'No Microphone') return 'offline';
+  return 'idle';
+}
+
+async function pollStatus(){
+  try{
+    const res = await fetch('/status');
+    const data = await res.json();
+    dot.className = 'dot ' + statusClass(data.status, data.speaking);
+    label.textContent = data.speaking ? 'Speaking...' : data.status;
+    statusText.textContent = data.text || '';
+  } catch(e){ /* ignore transient errors */ }
+}
+setInterval(pollStatus, 1200);
+pollStatus();
+
+// ================= LLM CONFIG =================
+
+const modal = document.getElementById('llm-modal');
+const providerSelect = document.getElementById('llm-provider');
+const modelSelect = document.getElementById('llm-model');
+
+// Models per provider
+const MODEL_MAP = {
+  "OpenAI": ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
+  "Gemini": ["gemini-2.5-flash", "gemini-2.5-pro","gemini-3.5-flash-lite"],
+  "Claude": ["claude-sonnet-5", "claude-opus-5"],
+  "Ollama": ["llama3", "mistral"]
+};
+
+// Open modal
+document.getElementById('btn-llm-config').onclick = () => {
+  modal.style.display = 'flex';
+  updateModels();
+};
+
+// Close modal
+document.getElementById('close-llm').onclick = () => {
+  modal.style.display = 'none';
+};
+
+// Update models dynamically
+function updateModels() {
+  const provider = providerSelect.value;
+  modelSelect.innerHTML = '';
+
+  MODEL_MAP[provider].forEach(model => {
+    const opt = document.createElement('option');
+    opt.value = model;
+    opt.textContent = model;
+    modelSelect.appendChild(opt);
+  });
+}
+
+providerSelect.onchange = updateModels;
+
+// Save config
+document.getElementById('save-llm').onclick = async () => {
+  const config = {
+    provider: providerSelect.value,
+    model: modelSelect.value,
+    api_key: document.getElementById('llm-api').value
+  };
+
+  try {
+    await fetch('/set-llm-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+
+    addMessage('assistant', `✅ LLM set to ${config.provider} (${config.model})`);
+  } catch (e) {
+    addMessage('assistant', '❌ Failed to save LLM config');
+  }
+
+  modal.style.display = 'none';
+};
+
+
+
+
+
+// ---------------- Init ----------------
+loadHistory();
+</script>
+<script>
+function showOverlay(type="listening") {
+  const overlay = document.getElementById("ai-overlay");
+  const text = document.getElementById("overlay-text");
+  const icon = document.getElementById("overlay-icon");
+
+  overlay.classList.remove("hidden");
+
+  if (type === "listening") {
+    text.innerText = "Listening...";
+    icon.innerText = "🎤";
+  } 
+  else if (type === "processing") {
+    text.innerText = "Processing...";
+    icon.innerText = "🧠";
+  }
+}
+
+function hideOverlay() {
+  document.getElementById("ai-overlay").classList.add("hidden");
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<!-- 🔥 GLOBAL OVERLAY -->
+<div id="ai-overlay" class="hidden">
+  <div class="overlay-box">
+    <div class="pulse-ring"></div>
+    <div id="overlay-icon">🎤</div>
+    <p id="overlay-text">Listening...</p>
+  </div>
+</div>
+
+{% block content %}{% endblock %}
+
+<script>
+function showOverlay(type="listening") {
+  localStorage.setItem("ai_state", type);   // 💡 persist state
+  updateOverlay(type);
+}
+
+function hideOverlay() {
+  localStorage.removeItem("ai_state");
+  document.getElementById("ai-overlay").classList.add("hidden");
+}
+
+function updateOverlay(type) {
+  const overlay = document.getElementById("ai-overlay");
+  const text = document.getElementById("overlay-text");
+  const icon = document.getElementById("overlay-icon");
+
+  overlay.classList.remove("hidden");
+
+  if (type === "listening") {
+    text.innerText = "Listening...";
+    icon.innerText = "🎤";
+  } else {
+    text.innerText = "Processing...";
+    icon.innerText = "🧠";
+  }
+}
+
+/* 🔥 Restore state after page reload */
+window.addEventListener("load", () => {
+  const state = localStorage.getItem("ai_state");
+  if (state) {
+    updateOverlay(state);
+  }
+});
+</script>
+
+</body>
+</html>

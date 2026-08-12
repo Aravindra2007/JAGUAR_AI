@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
 # 🐆 JAGUAR AI
 
 > A modular, voice-enabled personal AI assistant for your desktop — built with Python and PyQt6.
@@ -13,6 +17,10 @@ shutting down or restarting the machine — and if nothing matches,
 **hands the text to the configured LLM** so it can hold a real
 conversation instead of just saying "I didn't understand." It talks
 back using text-to-speech.
+<<<<<<< HEAD
+=======
+>>>>>>> cffc0614 (JAGUAR_AI)
+>>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
 
 ---
 
@@ -42,6 +50,10 @@ JAGUAR AI is a fully personalized desktop AI assistant designed to run locally o
 
 ---
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
 ## Project Structure
 =======
 ## Requirements
@@ -115,6 +127,10 @@ Anything else — `"what's the capital of France"`,
 the configured LLM and the reply is spoken back (unless muted).
 
 ## Project structure
+<<<<<<< HEAD
+=======
+>>>>>>> cffc0614 (JAGUAR_AI)
+>>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
 
 ```
 JAGUAR_AI/
@@ -252,7 +268,15 @@ JAGUAR is built to be extensible. You can:
 
 ## License
 
+<<<<<<< HEAD
 This project is currently unlicensed. All rights reserved by the author unless otherwise specified.
 =======
 Released under the [MIT License](LICENSE).
 
+=======
+<<<<<<< HEAD
+This project is currently unlicensed. All rights reserved by the author unless otherwise specified.
+=======
+Released under the [MIT License](LICENSE).
+>>>>>>> cffc0614 (JAGUAR_AI)
+>>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
