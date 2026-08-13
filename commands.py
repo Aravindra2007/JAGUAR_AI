@@ -2,7 +2,11 @@
 import webbrowser
 import os
 import subprocess
-import pyautogui
+try:
+    import pyautogui
+    GUI_AVAILABLE = True
+except:
+    GUI_AVAILABLE = False
 import pywhatkit
 import time
 from datetime import datetime
