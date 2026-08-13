@@ -9,7 +9,7 @@
  pyttsx3
  pyautogui
  pywhatkit
- PyAudio
+ #PyAudio
  # # --- Streamlit frontend ---
  streamlit
  streamlit-autorefresh
