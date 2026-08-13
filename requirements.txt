@@ -1,58 +1,91 @@
-Flask
-SpeechRecognition
-pyttsx3
-pyautogui
-pywhatkit
-PyAudio
-
-# # --- Streamlit frontend ---
-streamlit
-streamlit-autorefresh
-
-# # --- LLM fallback (router.py sends unmatched commands here) ---
-openai
-anthropic
-ollama
-google-generativeai
-
-# # --- Text-to-speech ---
-gTTS
-pygame            # replaces playsound: needed so Stop can interrupt gTTS playback mid-clip
-
-# # --- MySQL + accounts ---
-PyMySQL
-flask-login
-python-dotenv
-
-# # --- File upload reading (docs/images for tasking) ---
-PyPDF2
-python-docx
-pytesseract       # optional OCR for images; also requires the Tesseract engine installed on the OS
-Pillow
-
-
-
-# # --- Backend ---
 # Flask
-# flask-login
-# python-dotenv
-# PyMySQL
+# SpeechRecognition
+# pyttsx3
+# pyautogui
+# pywhatkit
+# PyAudio
 
-# # --- Frontend ---
+# # # --- Streamlit frontend ---
 # streamlit
 # streamlit-autorefresh
 
-# # --- LLM APIs ---
+# # # --- LLM fallback (router.py sends unmatched commands here) ---
 # openai
 # anthropic
 # ollama
 # google-generativeai
 
-# # --- File Processing ---
+# # # --- Text-to-speech ---
+# gTTS
+# pygame            # replaces playsound: needed so Stop can interrupt gTTS playback mid-clip
+
+# # # --- MySQL + accounts ---
+# PyMySQL
+# flask-login
+# python-dotenv
+
+# # # --- File upload reading (docs/images for tasking) ---
 # PyPDF2
 # python-docx
-# pytesseract
+# pytesseract       # optional OCR for images; also requires the Tesseract engine installed on the OS
 # Pillow
 
-# # --- Optional TTS (cloud-safe) ---
-# gTTS
+
+
+# # # --- Backend ---
+# # Flask
+# # flask-login
+# # python-dotenv
+# # PyMySQL
+
+# # # --- Frontend ---
+# # streamlit
+# # streamlit-autorefresh
+
+# # # --- LLM APIs ---
+# # openai
+# # anthropic
+# # ollama
+# # google-generativeai
+
+# # # --- File Processing ---
+# # PyPDF2
+# # python-docx
+# # pytesseract
+# # Pillow
+
+# # # --- Optional TTS (cloud-safe) ---
+# # gTTS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Flask
+flask-login
+python-dotenv
+PyMySQL
+
+streamlit
+streamlit-autorefresh
+
+openai
+anthropic
+ollama
+google-generativeai
+
+PyPDF2
+python-docx
+pytesseract
+Pillow
+
+gTTS
