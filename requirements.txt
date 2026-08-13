@@ -1,9 +1,9 @@
-# Flask
-# SpeechRecognition
-# pyttsx3
+Flask
+SpeechRecognition
+pyttsx3
 pyautogui
-# pywhatkit
-# PyAudio
+pywhatkit
+PyAudio
 
 # # --- Streamlit frontend ---
 # streamlit
