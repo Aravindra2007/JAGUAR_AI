@@ -2,7 +2,7 @@
 Authentication for Jaguar AI.
 
 Thin Flask-Login wrapper around db.py. Every account is stored in
-MySQL (users table) with a salted/hashed password - nothing sensitive
+Firebase with a salted/hashed password - nothing sensitive
 is ever kept in memory or in state.py.
 
 Blueprint routes:
@@ -27,7 +27,7 @@ login_manager.login_message_category = "info"
 
 
 class User(UserMixin):
-    """Thin adapter so Flask-Login can work with our MySQL row dict."""
+    """Thin adapter so Flask-Login can work with our Firebase user dict."""
 
     def __init__(self, row: dict):
         self.id = str(row["id"])
@@ -39,7 +39,7 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    row = db.get_user_by_id(int(user_id))
+    row = db.get_user_by_id(user_id)
     if not row:
         return None
     return User(row)
@@ -72,7 +72,7 @@ def register():
             flash(str(e), "error")
             return render_template("register.html")
         except Exception as e:
-            flash(f"Could not reach the database: {e}", "error")
+            flash(f"Could not reach Firebase: {e}", "error")
             return render_template("register.html")
 
         login_user(User(row))
@@ -95,7 +95,7 @@ def login():
         try:
             row = db.verify_login(identifier, password)
         except Exception as e:
-            flash(f"Could not reach the database: {e}", "error")
+            flash(f"Could not reach Firebase: {e}", "error")
             return render_template("login.html")
 
         if not row:

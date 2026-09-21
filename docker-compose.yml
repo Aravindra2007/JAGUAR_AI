@@ -1,0 +1,47 @@
+# docker-compose.yml — local multi-service dev / single-host deploy.
+#
+# Brings up:
+#   - MySQL 8 (data persisted in the named volume `jaguar_mysql`)
+#   - Jaguar Flask GUI + FastAPI mobile API (single container)
+#
+# Run:
+#   docker compose up --build
+#
+# Then open:
+#   http://localhost:5000        # the existing chat GUI
+#   http://localhost:8000/docs   # Swagger UI for the mobile API
+#   http://localhost:8000/redoc  # Redoc
+
+services:
+
+  jaguar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PLAYWRIGHT_BROWSERS: "1"
+    restart: unless-stopped
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON}
+      JAGUAR_SECRET_KEY: ${JAGUAR_SECRET_KEY:-change-me-in-prod}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      WORKERS: "2"
+      API_WORKERS: "2"
+      PORT: "5000"
+      API_PORT: "8000"
+    ports:
+      - "5000:5000"     # Flask GUI
+      - "8000:8000"     # FastAPI mobile API
+    volumes:
+      - jaguar_data:/app/jaguar_data
+      - jaguar_uploads:/app/uploads
+      - jaguar_logs:/app/logs
+
+volumes:
+  jaguar_data:
+  jaguar_uploads:
+  jaguar_logs:

@@ -1,0 +1,46 @@
+# Render "Blueprint" deployment descriptor.
+# `render blueprint launch` reads this file and creates the
+# services automatically. Both services share the same image and
+# the same MySQL instance.
+
+services:
+  - type: web
+    name: jaguar-gui
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: JAGUAR_SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false        # set this in the Render dashboard
+      - key: WORKERS
+        value: "2"
+      - key: JAGUAR_API_DISABLED
+        value: "1"        # only the GUI runs on this service
+    healthCheckPath: /health
+
+  - type: web
+    name: jaguar-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: JAGUAR_GUI_DISABLED
+        value: "1"        # only the API runs on this service
+      - key: API_WORKERS
+        value: "2"
+
+  - type: pserv

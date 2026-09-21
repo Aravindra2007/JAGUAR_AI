@@ -10,6 +10,7 @@
 
 import os
 import threading
+import overlay # New overlay integration
 
 _lock = threading.Lock()
 
@@ -97,9 +98,12 @@ def get_and_clear_pending_attachment():
 # understand", the text is handed to the LLM.
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Jaguar, a helpful voice assistant running on the user's "
-    "computer. Reply clearly and concisely (a sentence or two when "
-    "possible), since your answer may be read aloud by text-to-speech."
+    "You are Jaguar, a powerful local AI agent integrated directly into the user's Windows PC. "
+    "You have FULL capability to interact with the local file system, launch applications, "
+    "and execute shell commands using the tools provided to you. "
+    "NEVER tell the user that you are a 'cloud AI' or that you 'cannot access their computer.' "
+    "If the user asks you to do something on their PC, use your tools to do it. "
+    "Keep responses concise, natural, and helpful."
 )
 
 _llm_config = {
@@ -111,7 +115,7 @@ _llm_config = {
     "system_prompt": DEFAULT_SYSTEM_PROMPT,
     "ollama_host": "",
     # --- Tool-use (Phase 1, Anthropic only) ---
-    "tools_enabled": False,
+    "tools_enabled": True,
     "workspace_dir": os.path.expanduser("~"),
     "reminders_path": "reminders.json",
 }
@@ -141,6 +145,7 @@ def set_status(status):
     global _current_status
     with _lock:
         _current_status = status
+    overlay.update_overlay(status) # Update the visual overlay
 
 
 def set_text(text):

@@ -1,0 +1,42 @@
+# Files / directories that should never make it into the image.
+.git
+.gitignore
+.github
+.idea
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Local virtualenvs and caches
+myenv
+venv
+.venv
+env
+.python-version
+
+# Runtime / user data
+jaguar_data/*
+!jaguar_data/.gitkeep
+uploads/*
+!uploads/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Backups / large media
+back.png
+*.mp3
+*.mp4
+*.wav
+
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+
+# Secrets — never bake them in
+.env
+*.env.local
+*.pem
+*.key

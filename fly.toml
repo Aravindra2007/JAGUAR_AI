@@ -1,0 +1,43 @@
+# fly.toml — Fly.io launch config. Run `fly launch --copy-config`
+# to import it, then `fly deploy`. This launches a single VM that
+# exposes both the Flask GUI and the FastAPI mobile API on different
+# internal ports; Fly's edge proxy routes 80 -> 5000 and 443 -> 5000
+# by default, so for the API we add a second listener on its own
+# public port below.
+app = "jaguar-ai"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "5000"
+  API_PORT = "8000"
+  WORKERS = "2"
+  API_WORKERS = "2"
+
+[http_service]
+  internal_port = 5000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "get"
+    path = "/health"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  # No [[services.ports]] entry — Fly will assign a private port.
+  # To expose /api publicly, change internal_port to 8000 in a
+  # second [http_service] block above, or proxy through nginx.
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "1gb"

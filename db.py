@@ -1,37 +1,16 @@
-"""
-Jaguar AI — MySQL persistence layer.
-
-Everything the product needs to remember across restarts lives here:
-  - users            (login accounts)
-  - chat_history      (every typed + spoken exchange, per user)
-  - uploaded_files     (docs/images the user handed Jaguar to read)
-
-Connection settings come from environment variables so the same code
-runs in dev and production without editing source:
-
-    JAGUAR_DB_HOST      default: localhost
-    JAGUAR_DB_PORT      default: 3306
-    JAGUAR_DB_USER      default: root
-    JAGUAR_DB_PASSWORD  default: "" (empty)
-    JAGUAR_DB_NAME      default: jaguar_ai
-
-A `.env` file (see .env.example) is the easiest way to set these; the
-app loads it automatically via python-dotenv if present.
-
-Uses PyMySQL so there's no compiled C extension to install (works the
-same on Windows/macOS/Linux, unlike mysqlclient).
-"""
+"""Firebase persistence for Jaguar AI."""
 
 from __future__ import annotations
 
+import json
 import os
-from contextlib import contextmanager
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import pymysql
-import pymysql.cursors
-from werkzeug.security import generate_password_hash, check_password_hash
+import firebase_admin
+from firebase_admin import credentials, firestore
+from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
     from dotenv import load_dotenv
@@ -40,235 +19,192 @@ except ImportError:
     pass
 
 
-DB_CONFIG = {
-    "host": os.getenv("JAGUAR_DB_HOST", "localhost"),
-    "port": int(os.getenv("JAGUAR_DB_PORT", "3306")),
-    "user": os.getenv("JAGUAR_DB_USER", "root"),
-    "password": os.getenv("JAGUAR_DB_PASSWORD", "Harsha@89191"),
-    "database": os.getenv("JAGUAR_DB_NAME", "jaguar_ai"),
-    "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor,
-    "autocommit": False,
-}
-
-
 class DBError(Exception):
-    """Raised when a database operation fails."""
+    """Raised when a Firebase persistence operation fails."""
 
 
-def _connect(with_db: bool = True):
-    cfg = dict(DB_CONFIG)
-    if not with_db:
-        cfg.pop("database", None)
-    return pymysql.connect(**cfg)
+_firestore_client = None
 
 
-@contextmanager
-def get_cursor(commit: bool = False):
-    """Context manager yielding a DictCursor. Commits on success if
-    `commit=True`, always closes the connection."""
-    conn = _connect()
+def _credential():
+    credentials_json = (
+        os.getenv("FIREBASE_CREDENTIALS_JSON")
+        or os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+    )
+    credentials_path = (
+        os.getenv("FIREBASE_CREDENTIALS_PATH")
+        or os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
+    )
+    if credentials_json:
+        try:
+            return credentials.Certificate(json.loads(credentials_json))
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise DBError("FIREBASE_CREDENTIALS_JSON is not valid service-account JSON.") from exc
+    if credentials_path:
+        if not os.path.isfile(credentials_path):
+            raise DBError(f"Firebase credentials file was not found: {credentials_path}")
+        return credentials.Certificate(credentials_path)
+    raise DBError(
+        "Firebase credentials are missing. Copy .env.example to .env and set "
+        "FIREBASE_CREDENTIALS_PATH to your service-account JSON file."
+    )
+
+
+def _client():
+    global _firestore_client
+    if _firestore_client is not None:
+        return _firestore_client
     try:
-        with conn.cursor() as cur:
-            yield cur
-        if commit:
-            conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+        firebase_admin.get_app()
+    except ValueError:
+        options = {}
+        project_id = os.getenv("FIREBASE_PROJECT_ID")
+        if project_id:
+            options["projectId"] = project_id
+        firebase_admin.initialize_app(_credential(), options)
+    _firestore_client = firestore.client()
+    return _firestore_client
 
 
-# ---------------------------------------------------------------
-# Schema
-# ---------------------------------------------------------------
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    username        VARCHAR(80)  NOT NULL UNIQUE,
-    email           VARCHAR(255) NOT NULL UNIQUE,
-    full_name       VARCHAR(150) DEFAULT NULL,
-    password_hash   VARCHAR(255) NOT NULL,
-    role            VARCHAR(20)  NOT NULL DEFAULT 'student',
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_login_at   DATETIME     DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS chat_history (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id         INT NOT NULL,
-    role_label      VARCHAR(40)  DEFAULT NULL,
-    user_message    MEDIUMTEXT   NOT NULL,
-    assistant_reply MEDIUMTEXT   NOT NULL,
-    source          VARCHAR(10)  NOT NULL DEFAULT 'typed',
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_chat_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_chat_user_time (user_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS uploaded_files (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id         INT NOT NULL,
-    filename        VARCHAR(255) NOT NULL,
-    filepath        VARCHAR(500) NOT NULL,
-    filetype        VARCHAR(50)  DEFAULT NULL,
-    extracted_text  MEDIUMTEXT   DEFAULT NULL,
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_upload_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_upload_user_time (user_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-"""
+def init_firebase() -> None:
+    """Initialize Firebase and verify that Firestore is available."""
+    next(iter(_client().collection("users").limit(1).stream()), None)
 
 
 def init_db() -> None:
-    """Create the database (if missing) and all tables. Safe to call
-    on every app startup — every statement is IF NOT EXISTS."""
-    db_name = DB_CONFIG["database"]
-
-    conn = _connect(with_db=False)
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"CREATE DATABASE IF NOT EXISTS `{db_name}` "
-                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-            )
-        conn.commit()
-    finally:
-        conn.close()
-
-    conn = _connect()
-    try:
-        with conn.cursor() as cur:
-            for statement in SCHEMA.strip().split(";"):
-                statement = statement.strip()
-                if statement:
-                    cur.execute(statement)
-        conn.commit()
-    finally:
-        conn.close()
+    """Compatibility entry point retained for the existing app startup path."""
+    init_firebase()
 
 
-# ---------------------------------------------------------------
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _user_ref(user_id: str):
+    return _client().collection("users").document(str(user_id))
+
+
+def _user_from_snapshot(snapshot) -> Optional[Dict[str, Any]]:
+    if not snapshot.exists:
+        return None
+    row = snapshot.to_dict() or {}
+    row["id"] = snapshot.id
+    return row
+
+
+def _find_user(field: str, value: str) -> Optional[Dict[str, Any]]:
+    snapshots = _client().collection("users").where(
+        filter=firestore.FieldFilter(field, "==", value)
+    ).limit(1).stream()
+    snapshot = next(iter(snapshots), None)
+    return _user_from_snapshot(snapshot) if snapshot else None
+
+
 # Users / auth
-# ---------------------------------------------------------------
 
 def create_user(username: str, email: str, password: str,
-                 full_name: str = "", role: str = "student") -> Dict[str, Any]:
+                full_name: str = "", role: str = "student") -> Dict[str, Any]:
     username = (username or "").strip()
     email = (email or "").strip().lower()
-
     if not username or not email or not password:
         raise DBError("Username, email, and password are all required.")
     if len(password) < 6:
         raise DBError("Password must be at least 6 characters.")
+    if _find_user("username", username) or _find_user("email", email):
+        raise DBError("That username or email is already registered.")
 
-    password_hash = generate_password_hash(password)
-
-    with get_cursor(commit=True) as cur:
-        cur.execute("SELECT id FROM users WHERE username=%s OR email=%s", (username, email))
-        if cur.fetchone():
-            raise DBError("That username or email is already registered.")
-
-        cur.execute(
-            "INSERT INTO users (username, email, full_name, password_hash, role) "
-            "VALUES (%s, %s, %s, %s, %s)",
-            (username, email, full_name.strip(), password_hash, role),
-        )
-        user_id = cur.lastrowid
-
-    return get_user_by_id(user_id)
+    user_id = uuid.uuid4().hex
+    row = {
+        "id": user_id,
+        "username": username,
+        "email": email,
+        "full_name": (full_name or "").strip(),
+        "password_hash": generate_password_hash(password),
+        "role": role,
+        "created_at": _now(),
+        "last_login_at": None,
+    }
+    _user_ref(user_id).set({key: value for key, value in row.items() if key != "id"})
+    return row
 
 
 def verify_login(username_or_email: str, password: str) -> Optional[Dict[str, Any]]:
     identifier = (username_or_email or "").strip()
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "SELECT * FROM users WHERE username=%s OR email=%s",
-            (identifier, identifier.lower()),
-        )
-        user = cur.fetchone()
-        if not user:
-            return None
-        if not check_password_hash(user["password_hash"], password or ""):
-            return None
-
-        cur.execute(
-            "UPDATE users SET last_login_at=%s WHERE id=%s",
-            (datetime.now(), user["id"]),
-        )
+    user = _find_user("username", identifier) or _find_user("email", identifier.lower())
+    if not user or not check_password_hash(user.get("password_hash", ""), password or ""):
+        return None
+    last_login_at = _now()
+    _user_ref(user["id"]).update({"last_login_at": last_login_at})
+    user["last_login_at"] = last_login_at
     return user
 
 
-def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
-    with get_cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
-        return cur.fetchone()
+def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    return _user_from_snapshot(_user_ref(str(user_id)).get())
 
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
-    with get_cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE username=%s", (username,))
-        return cur.fetchone()
+    return _find_user("username", username)
 
 
-# ---------------------------------------------------------------
 # Chat history
-# ---------------------------------------------------------------
 
-def save_chat_message(user_id: int, user_message: str, assistant_reply: str,
-                       role_label: str = "", source: str = "typed") -> None:
+def save_chat_message(user_id: str, user_message: str, assistant_reply: str,
+                      role_label: str = "", source: str = "typed") -> None:
     if not user_id:
         return
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "INSERT INTO chat_history (user_id, role_label, user_message, assistant_reply, source) "
-            "VALUES (%s, %s, %s, %s, %s)",
-            (user_id, role_label, user_message, assistant_reply, source),
-        )
+    _client().collection("chat_history").document(uuid.uuid4().hex).set({
+        "user_id": str(user_id),
+        "role_label": role_label,
+        "user_message": user_message,
+        "assistant_reply": assistant_reply,
+        "source": source,
+        "created_at": _now(),
+    })
 
 
-def get_recent_chat(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+def get_recent_chat(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     if not user_id:
         return []
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT user_message, assistant_reply, source, created_at FROM chat_history "
-            "WHERE user_id=%s ORDER BY id DESC LIMIT %s",
-            (user_id, limit),
-        )
-        rows = cur.fetchall()
+    snapshots = (_client().collection("chat_history")
+                 .where(filter=firestore.FieldFilter("user_id", "==", str(user_id)))
+                 .order_by("created_at", direction=firestore.Query.DESCENDING)
+                 .limit(limit).stream())
+    rows = [snapshot.to_dict() for snapshot in snapshots]
     return list(reversed(rows))
 
 
-def clear_chat_history(user_id: int) -> None:
+def clear_chat_history(user_id: str) -> None:
     if not user_id:
         return
-    with get_cursor(commit=True) as cur:
-        cur.execute("DELETE FROM chat_history WHERE user_id=%s", (user_id,))
+    snapshots = _client().collection("chat_history").where(
+        filter=firestore.FieldFilter("user_id", "==", str(user_id))
+    ).stream()
+    batch = _client().batch()
+    for snapshot in snapshots:
+        batch.delete(snapshot.reference)
+    batch.commit()
 
 
-# ---------------------------------------------------------------
 # Uploaded files
-# ---------------------------------------------------------------
 
-def save_uploaded_file(user_id: int, filename: str, filepath: str,
-                        filetype: str = "", extracted_text: str = "") -> int:
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "INSERT INTO uploaded_files (user_id, filename, filepath, filetype, extracted_text) "
-            "VALUES (%s, %s, %s, %s, %s)",
-            (user_id, filename, filepath, filetype, (extracted_text or "")[:200000]),
-        )
-        return cur.lastrowid
+def save_uploaded_file(user_id: str, filename: str, filepath: str,
+                       filetype: str = "", extracted_text: str = "") -> str:
+    file_id = uuid.uuid4().hex
+    _client().collection("uploaded_files").document(file_id).set({
+        "user_id": str(user_id),
+        "filename": filename,
+        "filepath": filepath,
+        "filetype": filetype,
+        "extracted_text": (extracted_text or "")[:200000],
+        "created_at": _now(),
+    })
+    return file_id
 
 
-def get_uploaded_files(user_id: int, limit: int = 25) -> List[Dict[str, Any]]:
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT id, filename, filetype, created_at FROM uploaded_files "
-            "WHERE user_id=%s ORDER BY id DESC LIMIT %s",
-            (user_id, limit),
-        )
-        return cur.fetchall()
+def get_uploaded_files(user_id: str, limit: int = 25) -> List[Dict[str, Any]]:
+    snapshots = (_client().collection("uploaded_files")
+                 .where(filter=firestore.FieldFilter("user_id", "==", str(user_id)))
+                 .order_by("created_at", direction=firestore.Query.DESCENDING)
+                 .limit(limit).stream())
+    return [{"id": snapshot.id, **snapshot.to_dict()} for snapshot in snapshots]

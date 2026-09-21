@@ -1,268 +1,70 @@
+# 🐆 Jaguar AI: Local OS Intelligence Agent
 
-# 🐆 JAGUAR AI
+Jaguar AI is a sophisticated, voice-activated local agent designed to bridge the gap between Large Language Models (LLMs) and direct Operating System control. Unlike cloud chatbots, Jaguar operates as a local agent with the ability to launch applications, manage files, and execute system commands on a Windows environment.
 
-> A modular, voice-enabled personal AI assistant for your desktop — built with Python and PyQt6.
-=======
-# Jaguar AI
+## 🚀 Core Capabilities
+- **Voice-to-Action Pipeline**: Integrated Speech-to-Text (STT) and Text-to-Speech (TTS) for a hands-free experience.
+- **Agentic Tool-Use**: Utilizes a "Confirmation Envelope" pattern to safely execute mutating OS actions (e.g., writing files, launching apps) only after explicit user approval.
+- **Proactive Intelligence**: Features a background reminder service that independently monitors and triggers alerts.
+- **Contextual Awareness**: Maintains short-term conversation history and processes uploaded document/image context to answer specific queries about local data.
+- **Visual Presence**: A dedicated desktop overlay (status pill) providing real-time feedback on the agent's state (Idle, Listening, Processing).
 
-**Jaguar** is a Python voice/text assistant that integrates with
-multiple AI models (OpenAI, Anthropic Claude, Google Gemini, and local
-Ollama models). It listens for spoken commands (or accepts typed ones),
-first checks a table of built-in actions — opening apps and websites,
-playing YouTube videos, searching the web, telling the time/date,
-shutting down or restarting the machine — and if nothing matches,
-**hands the text to the configured LLM** so it can hold a real
-conversation instead of just saying "I didn't understand." It talks
-back using text-to-speech.
-<<<<<<< HEAD
-=======
->>>>>>> cffc0614 (JAGUAR_AI)
->>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
+## 🛠️ Technical Stack
 
----
+### Backend & Orchestration
+- **Language**: Python 3.12
+- **Web Framework**: Flask (API & Dashboard)
+- **Concurrency**: Threading (for Voice Listener, Reminder Manager, and Overlay)
 
-## Overview
+### AI & NLP
+- **LLM Providers**: Anthropic (Claude 3.5 Sonnet), OpenAI (GPT-4o), Google (Gemini), and Ollama (Local Llama 3)
+- **NLU**: Hybrid Keyword Routing + LLM Reasoning
+- **Agent Loop**: Tool-calling loop with confirmation-based execution
 
-JAGUAR AI is a fully personalized desktop AI assistant designed to run locally on your system. It combines speech recognition, natural language processing, system automation, and a graphical interface into a cohesive, extensible platform. Whether you want to control your PC with your voice, automate repetitive tasks, or interact with local and cloud-based AI models, JAGUAR has you covered.
+### OS & Voice Integration
+- **Speech Recognition**: `SpeechRecognition` (Google SR)
+- **Text-to-Speech**: `gTTS` (Google TTS) and `pyttsx3` (Offline Fallback)
+- **OS Automation**: `pyautogui` (Keyboard/Mouse), `subprocess` (Shell), `webbrowser`
+- **UI/Overlay**: `tkinter` (Desktop Overlay)
 
----
+### Data & Storage
+- **Database**: Firebase / MySQL (Chat History & User Auth)
+- **Local Storage**: JSON-based persistence for reminders and configuration
 
-## Features
+## 🔄 System Pipeline
 
-- 🎤 **Voice Input & Output** — Real-time speech recognition via `SpeechRecognition` + `PyAudio`, with text-to-speech responses powered by `pyttsx3`
-- 🧠 **AI Brain** — Integrates with both **OpenAI** (cloud) and **Ollama** (local LLMs) for flexible, privacy-conscious AI responses
-- 🖥️ **Desktop GUI** — Built with **PyQt6** for a clean, native desktop experience
-- 🤖 **Agents** — Modular agent system for delegating tasks to specialized sub-routines
-- 🔧 **System Automation** — Controls your PC via `pyautogui`, `pygetwindow`, and `pyperclip`
-- 📅 **Scheduler** — Run tasks and reminders on a schedule
-- 🧩 **Plugin Architecture** — Extend JAGUAR with custom plugins in the `plugins/` directory
-- 🛠️ **Skills System** — Discrete, composable skills that the assistant can invoke
-- 📝 **Memory** — Persistent memory layer to retain context across sessions
-- 👁️ **Vision & OCR** — Screen and image understanding via `EasyOCR`, `OpenCV`, and `Pillow`
-- 📄 **PDF Handling** — Read and process PDF documents with `PyMuPDF` and `pypdf`
-- 🌐 **Web Actions** — Browse and interact with the web using `pywhatkit` and `requests`
-- 🔔 **Wake Word Detection** — Always-listening trigger using **Picovoice Porcupine**
-- 📊 **System Monitoring** — Track CPU, memory, and process stats via `psutil`
-- 📋 **Logging** — Structured logs stored in the `logs/` directory
+**Voice Input** $\rightarrow$ **ASR (STT)** $\rightarrow$ **Command Router** $\rightarrow$ **LLM / Keyword Match** $\rightarrow$ **Tool Executor** $\rightarrow$ **User Confirmation** $\rightarrow$ **OS Side-Effect** $\rightarrow$ **TTS Feedback**
 
----
+## 📦 Installation & Setup
 
-
-## Project Structure
-=======
-## Requirements
-
-- Python 3.x
-- A working microphone (for voice mode)
-- Packages in `requirements.txt` (Flask, SpeechRecognition, pyttsx3,
-  pyautogui, pywhatkit, PyAudio, streamlit, streamlit-autorefresh,
-  openai, ollama)
-- An OpenAI API key, Anthropic API key, Google AI Studio key (if using
-  those providers) **or** [Ollama](https://ollama.com) running locally
-  with a pulled model (if using Ollama)
-
-> **Note:** Several built-in commands (Notepad/Calculator/Paint/CMD,
-> `shutdown`, `restart`) use Windows-specific calls, so this project is
-> built primarily for **Windows**.
-
-## Installation
-
-```bash
-git clone https://github.com/Aravindra2007/JAGUAR_AK.git
-cd JAGUAR_AK
-pip install -r requirements.txt
-```
-
-On Windows, `PyAudio` may need a prebuilt wheel if `pip install` fails —
-install via `pipwin install pyaudio` or a matching `.whl`.
-
-## Usage
-
-**Streamlit GUI (recommended — includes the LLM settings panel):**
-
-```bash
-streamlit run streamlit_app.py
-```
-
-**Flask GUI:**
-
-```bash
-python main.py
-```
-
-Either way, from the GUI you can:
-
-- Type a command, or just chat — anything that isn't a recognized
-  command goes straight to the LLM
-- Click **Start** to enable voice listening (say a command or ask a
-  question, then pause) — voice input goes through the exact same
-  pipeline as typed input, including the LLM fallback
-- Click **Stop** to disable the microphone
-- Mute/unmute spoken responses
-- View or clear conversation history
-- (Streamlit) open **🧠 LLM settings** in the sidebar to pick a
-  provider (OpenAI / Claude / Gemini / Ollama), model, temperature,
-  and system prompt
-
-Built-in commands still work exactly as before:
-
-- `open google` / `open youtube` / `open github`
-- `play <song name>` (plays on YouTube)
-- `search <query>` / `search youtube for <query>`
-- `open notepad` / `open calculator` / `open paint` / `open vs code`
-- `time` / `date`
-- `shutdown` / `restart`
-- `exit` / `quit` / `goodbye`
-- `stop listening`, `go idle`, `sleep`, or `stop` (voice-only, pauses
-  the mic)
-
-Anything else — `"what's the capital of France"`,
-`"summarize the plot of dune"`, `"why is the sky blue"` — is sent to
-the configured LLM and the reply is spoken back (unless muted).
-
-## Project structure
-<<<<<<< HEAD
-=======
->>>>>>> cffc0614 (JAGUAR_AI)
->>>>>>> 33294c91 (jaguar Please enter the commit message for your changes. Lines starting)
-
-```
-JAGUAR_AI/
-├── main.py              # Entry point — launches the GUI and assistant core
-├── requirements.txt     # Python dependencies
-│
-├── core/                # Assistant brain and orchestration logic
-├── ai/                  # AI model integrations (OpenAI, Ollama)
-├── agents/              # Specialized task agents
-├── automation/          # Desktop automation routines
-├── gui/                 # PyQt6 graphical interface
-├── memory/              # Persistent memory and context storage
-├── plugins/             # Extensible plugin system
-├── scheduler/           # Task scheduling and reminders
-├── skills/              # Discrete assistant skills
-├── system/              # System-level utilities and monitoring
-├── tasks/               # Task definitions and management
-├── voice/               # Speech recognition and TTS modules
-└── logs/                # Runtime logs
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.10 or higher
-- A working microphone (for voice features)
-- [Ollama](https://ollama.com) installed locally (optional, for local LLM support)
-- An OpenAI API key (optional, for cloud AI support)
-
-### Installation
-
-1. **Clone the repository**
-
+1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Aravindra2007/JAGUAR_AI.git
-   cd JAGUAR_AI
+   git clone https://github.com/yourusername/jaguar-ai.git
+   cd jaguar-ai
    ```
 
-2. **Create and activate a virtual environment**
-
+2. **Setup Virtual Environment**:
    ```bash
-   python -m venv venv
-   # On Windows:
-   venv\Scripts\activate
-   # On macOS/Linux:
-   source venv/bin/activate
-   ```
-
-3. **Install dependencies**
-
-   ```bash
+   python -m venv myenv
+   source myenv/Scripts/activate  # Windows
    pip install -r requirements.txt
    ```
 
-4. **Configure environment variables**
-
-   Create a `.env` file in the project root and add your API keys:
-
+3. **Configure Environment**:
+   Create a `.env` file with your API keys:
    ```env
-   OPENAI_API_KEY=your_openai_key_here
-   PORCUPINE_ACCESS_KEY=your_picovoice_key_here
+   JAGUAR_SECRET_KEY=your_secret_key
+   ANTHROPIC_API_KEY=your_api_key
+   OPENAI_API_KEY=your_api_key
+   FIREBASE_CREDENTIALS_PATH=path/to/your/serviceAccountKey.json
    ```
 
-5. **Run JAGUAR AI**
-
+4. **Run the Agent**:
    ```bash
    python main.py
    ```
 
----
-
-## Dependencies
-
-| Package | Purpose |
-|---|---|
-| `PyQt6` | Desktop GUI framework |
-| `SpeechRecognition` + `PyAudio` | Voice input |
-| `pyttsx3` | Text-to-speech output |
-| `openai` | OpenAI API integration |
-| `ollama` | Local LLM integration |
-| `pvporcupine` | Wake word detection |
-| `pyautogui` + `pygetwindow` | Desktop automation |
-| `pyperclip` | Clipboard interaction |
-| `pywhatkit` | Web-based actions |
-| `psutil` | System resource monitoring |
-| `easyocr` + `opencv-python` | Vision and OCR |
-| `pillow` | Image processing |
-| `pymupdf` + `pypdf` | PDF reading and parsing |
-| `requests` | HTTP requests |
-| `python-dotenv` | Environment variable management |
-
----
-
-## Configuration
-
-JAGUAR AI uses a `.env` file for secrets and configuration. Key variables:
-
-| Variable | Description |
-|---|---|
-| `OPENAI_API_KEY` | Your OpenAI API key (if using cloud AI) |
-| `PORCUPINE_ACCESS_KEY` | Picovoice key for wake word detection |
-
-Additional configuration (AI model selection, voice preferences, plugin toggles) can be found in the `core/` and `system/` modules.
-
----
-
-## Extending JAGUAR
-
-JAGUAR is built to be extensible. You can:
-
-- **Add a plugin** — drop a new Python module into `plugins/` following the existing plugin interface
-- **Add a skill** — define a new skill in `skills/` that the assistant can invoke by name or intent
-- **Add an agent** — create a specialized agent in `agents/` for complex multi-step tasks
-
----
-
-## Roadmap
-
-- [ ] Web-based configuration dashboard
-- [ ] Cross-platform packaging (Windows `.exe`, macOS `.app`)
-- [ ] Expanded plugin marketplace
-- [ ] Multi-language voice support
-- [ ] Vision-based screen understanding (live feed)
-
----
-
-## Author
-
-**Aravindra** — [GitHub @Aravindra2007](https://github.com/Aravindra2007)
-
----
-
-## License
-
-This project is currently unlicensed. All rights reserved by the author unless otherwise specified.
-=======
-Released under the [MIT License](LICENSE).
-
+## 🛡️ Security Implementation
+- **Allowlist-based Shell**: Only pre-approved commands (e.g., `dir`, `ipconfig`) can be executed.
+- **Workspace Isolation**: All file operations are restricted to a designated workspace directory to prevent system-wide corruption.
+- **Human-in-the-Loop**: No mutating tool is executed without an explicit user "Yes" via voice or GUI.

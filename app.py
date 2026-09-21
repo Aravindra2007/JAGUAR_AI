@@ -1,6 +1,12 @@
 import os
 import uuid
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
@@ -13,6 +19,19 @@ import languages
 import db
 import file_reader
 from auth import init_auth
+
+# New autonomous-agent core (graceful when optional deps are missing)
+try:
+    from jaguar_core import memory as jaguar_memory
+    from jaguar_core import personality as jaguar_personality
+    from jaguar_core.autonomous import (
+        run_autonomous_goal, get_job as get_autonomous_job,
+        list_jobs as list_autonomous_jobs,
+    )
+    JAGUAR_AUTONOMOUS_AVAILABLE = True
+except Exception as _e:  # pragma: no cover
+    JAGUAR_AUTONOMOUS_AVAILABLE = False
+    print(f"[jaguar] autonomous core unavailable: {_e}")
 
 app = Flask(__name__)
 app.secret_key = os.getenv("JAGUAR_SECRET_KEY", "dev-key-change-this-in-production")
@@ -33,10 +52,10 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 # ---------------------------------
 try:
     db.init_db()
-    print("MySQL ready.")
+    print("Firebase ready.")
 except Exception as e:
-    print(f"WARNING: could not initialize MySQL ({e}). "
-          f"Set JAGUAR_DB_HOST/USER/PASSWORD/NAME and make sure MySQL is running.")
+    print(f"WARNING: could not initialize Firebase ({e}). "
+          "Set FIREBASE_CREDENTIALS_PATH or FIREBASE_CREDENTIALS_JSON.")
 
 init_auth(app)
 
@@ -47,6 +66,18 @@ init_auth(app)
 router = CommandRouter()
 listener = VoiceListener()
 listener.start()   # starts the background thread (mic stays idle until /start is called)
+
+# Optional: mount the FastAPI mobile API inside the Flask app at
+# /mobile, so a single `python main.py` (or gunicorn wsgi:app)
+# serves both UIs. Disable with JAGUAR_MOUNT_MOBILE_API=0.
+if os.getenv("JAGUAR_MOUNT_MOBILE_API", "0") == "1":
+    try:
+        from api.router_bridge import attach_mobile_api
+        from api.mobile_api import app as _fastapi_app
+        attach_mobile_api(app, _fastapi_app)
+        print("[jaguar] FastAPI mobile API mounted at /mobile")
+    except Exception as _mount_err:
+        print(f"[jaguar] mobile API not mounted: {_mount_err}")
 
 
 # ---------------------------------
@@ -141,15 +172,15 @@ def set_llm_config():
 @login_required
 def get_history():
     try:
-        rows = db.get_recent_chat(int(current_user.id), limit=100)
+        rows = db.get_recent_chat(current_user.id, limit=100)
         history = [
             {"user": r["user_message"], "assistant": r["assistant_reply"]}
             for r in rows
         ]
         return jsonify(history)
     except Exception as e:
-        # Fall back to in-memory history (e.g. MySQL not configured yet)
-        print(f"[history] MySQL read failed, using in-memory: {e}")
+        # Fall back to in-memory history when Firebase is unavailable.
+        print(f"[history] Firebase read failed, using in-memory: {e}")
         return jsonify(state.get_history())
 
 
@@ -164,9 +195,9 @@ def clear():
     state.clear_history()
     state.set_text("Conversation Cleared.")
     try:
-        db.clear_chat_history(int(current_user.id))
+        db.clear_chat_history(current_user.id)
     except Exception as e:
-        print(f"[clear] MySQL clear failed: {e}")
+        print(f"[clear] Firebase clear failed: {e}")
 
     return jsonify({
         "success": True
@@ -282,13 +313,151 @@ def llm_config():
 
 
 # ---------------------------------
+# Liveness probe (for Docker / Render / Fly / k8s)
+# ---------------------------------
+
+@app.route("/health")
+def health():
+    """Cheap health check used by container orchestrators. Doesn't
+    require login so external uptime checks work."""
+    return jsonify({
+        "status": "ok",
+        "service": "jaguar-ai",
+        "autonomous": JAGUAR_AUTONOMOUS_AVAILABLE,
+        "time": __import__("time").time(),
+    })
+
+
+# ---------------------------------
+# Autonomous goal (text in -> plan + execute)
+# ---------------------------------
+# Wires the new planner + executor + browser automation into the
+# existing Flask UI. The endpoint always returns a job_id; the
+# frontend polls /autonomous/<job_id> to follow progress.
+
+@app.route("/autonomous", methods=["POST"])
+@login_required
+def autonomous_run():
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Autonomous core unavailable."}), 503
+
+    data = request.get_json() or {}
+    goal = (data.get("goal") or "").strip()
+    if not goal:
+        return jsonify({"ok": False, "error": "Empty goal."}), 400
+
+    cfg = state.get_llm_config()
+    try:
+        job = run_autonomous_goal(
+            goal=goal,
+            llm_provider=cfg.get("provider", "OpenAI"),
+            llm_api_key=cfg.get("api_key", ""),
+            llm_model=cfg.get("model", ""),
+            llm_temperature=float(cfg.get("temperature", 0.3) or 0.3),
+            ollama_host=cfg.get("ollama_host") or None,
+            headless_browser=bool(data.get("headless_browser", False)),
+            background=bool(data.get("background", True)),
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({"ok": True, "job": job.to_dict()})
+
+
+@app.route("/autonomous/<job_id>")
+@login_required
+def autonomous_status(job_id: str):
+    job = get_autonomous_job(job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "Unknown job_id"}), 404
+    return jsonify({"ok": True, "job": job.to_dict()})
+
+
+@app.route("/autonomous-jobs")
+@login_required
+def autonomous_list():
+    return jsonify({
+        "ok": True,
+        "jobs": [j.to_dict() for j in list_autonomous_jobs(limit=50)],
+    })
+
+
+# ---------------------------------
+# Personality preferences
+# ---------------------------------
+
+@app.route("/personality", methods=["GET", "POST"])
+@login_required
+def personality_route():
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Personality core unavailable."}), 503
+
+    if request.method == "POST":
+        data = request.get_json() or {}
+        for k, v in data.items():
+            if v in (None, ""):
+                continue
+            jaguar_memory.update_preference(k, v)
+        # Reseat the LLM system prompt so the change is immediate.
+        prefs = jaguar_memory.get_preferences()
+        base = state.get_llm_config().get("system_prompt", "")
+        new_system = jaguar_personality.build_system_prompt(base, preferences=prefs)
+        state.set_llm_config(system_prompt=new_system)
+        return jsonify({"ok": True, "preferences": prefs})
+
+    return jsonify({
+        "ok": True,
+        "preferences": jaguar_memory.get_preferences(),
+        "tones": jaguar_personality.available_tones(),
+        "styles": jaguar_personality.available_styles(),
+    })
+
+
+# ---------------------------------
+# Long-term memory recall
+# ---------------------------------
+
+@app.route("/memory/recall", methods=["POST"])
+@login_required
+def memory_recall():
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Memory core unavailable."}), 503
+    data = request.get_json() or {}
+    query = (data.get("query") or "").strip()
+    if not query:
+        return jsonify({"ok": False, "error": "Empty query."}), 400
+    entries = jaguar_memory.recall(
+        query,
+        top_k=int(data.get("top_k", 5) or 5),
+        kind=data.get("kind"),
+    )
+    return jsonify({
+        "ok": True,
+        "query": query,
+        "entries": [e.to_dict() for e in entries],
+    })
+
+
+@app.route("/memory/results")
+@login_required
+def memory_results():
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Memory core unavailable."}), 503
+    kind = request.args.get("kind")
+    return jsonify({
+        "ok": True,
+        "results": jaguar_memory.list_results(kind=kind, limit=100),
+    })
+
+
+# ---------------------------------
 # Start Listening
 # ---------------------------------
 
 @app.route("/start", methods=["POST"])
 @login_required
 def start():
-    state.set_current_user(int(current_user.id), current_user.username)
+    state.set_current_user(current_user.id, current_user.username)
     listener.start_listening()
 
     return jsonify({"success": True})

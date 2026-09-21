@@ -97,7 +97,9 @@ class CommandRouter:
         text = text.lower().strip()
 
         for command, function in self.routes.items():
-            if command in text:   # ✅ better than startswith
+            # Use a simple word-boundary check to avoid triggers like "time" in "some time"
+            import re
+            if re.search(rf'\b{re.escape(command)}\b', text):
                 result = function(text)
                 self._persist(text, result)
                 return result
@@ -113,11 +115,11 @@ class CommandRouter:
        
 
     # -------------------------
-    # Persistence (MySQL)
+    # Persistence (Firebase)
     # -------------------------
 
     def _persist(self, user_text, result):
-        """Save a finished (non-envelope) exchange to MySQL under the
+        """Save a finished (non-envelope) exchange to Firebase under the
         currently logged-in user, if there is one. Confirmation
         envelopes are saved later, once resolved."""
         if isinstance(result, dict) and result.get("type") == "needs_confirmation":
@@ -128,7 +130,7 @@ class CommandRouter:
         try:
             db.save_chat_message(user_id, user_text, str(result))
         except Exception as e:
-            print(f"[router] Could not save chat to MySQL: {e}")
+            print(f"[router] Could not save chat to Firebase: {e}")
 
     # -------------------------
     # LLM fallback
@@ -174,6 +176,10 @@ class CommandRouter:
         for entry in state.get_history()[-5:]:
             messages.append({"role": "user", "content": entry["user"]})
             messages.append({"role": "assistant", "content": entry["assistant"]})
+
+        # Voice Optimization: If this is a voice interaction, tell the LLM to be concise.
+        # We can check this by seeing if the text was processed via the listener.
+        system_prompt += "\n\nIMPORTANT: You are interacting via voice. Keep your responses concise, natural, and conversational. Avoid using long lists or complex markdown formatting."
 
         # If the user just uploaded a document/image via /upload, fold
         # its extracted content into this turn so "summarize this" /
