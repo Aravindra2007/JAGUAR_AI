@@ -2,7 +2,12 @@
 
 Jaguar AI is a sophisticated, voice-activated local agent designed to bridge the gap between Large Language Models (LLMs) and direct Operating System control. Unlike cloud chatbots, Jaguar operates as a local agent with the ability to launch applications, manage files, and execute system commands on a Windows environment.
 
+![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
+
 ## 🚀 Core Capabilities
+
 - **Voice-to-Action Pipeline**: Integrated Speech-to-Text (STT) and Text-to-Speech (TTS) for a hands-free experience.
 - **Agentic Tool-Use**: Utilizes a "Confirmation Envelope" pattern to safely execute mutating OS actions (e.g., writing files, launching apps) only after explicit user approval.
 - **Proactive Intelligence**: Features a background reminder service that independently monitors and triggers alerts.
@@ -46,12 +51,13 @@ Jaguar AI is a sophisticated, voice-activated local agent designed to bridge the
 2. **Setup Virtual Environment**:
    ```bash
    python -m venv myenv
-   source myenv/Scripts/activate  # Windows
+   # On Windows:
+   myenv\Scripts\activate
    pip install -r requirements.txt
    ```
 
 3. **Configure Environment**:
-   Create a `.env` file with your API keys:
+   Create a `.env` file in the root directory with your API keys:
    ```env
    JAGUAR_SECRET_KEY=your_secret_key
    ANTHROPIC_API_KEY=your_api_key
