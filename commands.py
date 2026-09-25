@@ -206,6 +206,35 @@ class Commands:
         os.system("start notepad")
         return "Opening Notepad."
 
+    def write_text(self, text):
+        """Writes a specified text to a file or uses pyautogui to type it."""
+        # Extract what to write
+        content = text.replace("write", "").strip()
+        if not content:
+            return "What would you like me to write?"
+
+        try:
+            import pyautogui
+            # Assuming Notepad or current window is open
+            pyautogui.write(content, interval=0.1)
+            return f"Typed: {content}"
+        except Exception as e:
+            return f"Could not type text: {e}"
+
+    def create_folder(self, text):
+        """Creates a folder in the D drive."""
+        # Extract folder name
+        folder_name = text.replace("create a folder", "").replace("in d drive", "").strip()
+        if not folder_name:
+            folder_name = "Jaguar_Folder"
+
+        path = os.path.join("D:\\", folder_name)
+        try:
+            os.makedirs(path, exist_ok=True)
+            return f"Folder created successfully at {path}"
+        except Exception as e:
+            return f"Could not create folder in D drive: {e}"
+
     def open_calculator(self, text):
         os.system("start calc")
         return "Opening Calculator."

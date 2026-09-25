@@ -5,12 +5,14 @@ import state
 import db
 from tool_executor import ToolExecutor
 from tools import TOOLS
+from nlu import JaguarNLU
 
 
 class CommandRouter:
 
     def __init__(self):
         self.cmd = Commands()
+        self.nlu = JaguarNLU()
 
         self.routes = {
             # Browser
@@ -30,6 +32,10 @@ class CommandRouter:
             "open spotify": self.cmd.open_spotify,
             "spotify play":self.cmd.play_spotify,
             "close spotify ":self.cmd.close_tab,
+
+            # Writing & Folders
+            "write": self.cmd.write_text,
+            "create a folder": self.cmd.create_folder,
 
             # YouTube
             "open youtube": self.cmd.open_youtube,
@@ -96,8 +102,34 @@ class CommandRouter:
 
         text = text.lower().strip()
 
+        # Use the NLU system to parse intent and slots
+        nlu_result = self.nlu.parse(text)
+        intent = nlu_result["intent"]
+        slots = nlu_result["slots"]
+
+        # Mapping intents to existing command routes
+        intent_map = {
+            "LIGHTS_ON": "turn on the lights",
+            "LIGHTS_OFF": "turn off the lights",
+            "TEMPERATURE_SET": "temperature",
+            "MUSIC_PLAY": "play",
+            "SYSTEM_STATUS": "status",
+            "OPEN_APP": "open",
+            "CLOSE_APP": "close",
+        }
+
+        if intent != "UNKNOWN_INTENT":
+            route_key = intent_map.get(intent)
+            if route_key:
+                # Find the first route that matches the route_key keyword
+                for command, function in self.routes.items():
+                    if route_key in command:
+                        result = function(text) # Pass raw text for now, could use slots
+                        self._persist(text, result)
+                        return result
+
+        # Fallback to original keyword search for backward compatibility
         for command, function in self.routes.items():
-            # Use a simple word-boundary check to avoid triggers like "time" in "some time"
             import re
             if re.search(rf'\b{re.escape(command)}\b', text):
                 result = function(text)
