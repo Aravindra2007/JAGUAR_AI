@@ -8,7 +8,7 @@ Jaguar is built to deploy in many shapes. Pick whichever matches your infrastruc
 docker compose up --build
 ```
 
-That brings up the Jaguar container, which uses Firebase/Firestore, exposing the existing Flask GUI on `http://localhost:5000` and the FastAPI mobile API on `http://localhost:8000` (Swagger UI at `/docs`, ReDoc at `/redoc`).
+That brings up the Jaguar container, which uses MySQL, exposing the existing Flask GUI on `http://localhost:5000` and the FastAPI mobile API on `http://localhost:8000` (Swagger UI at `/docs`, ReDoc at `/redoc`).
 
 To run the container alone (with an existing MySQL):
 
@@ -63,7 +63,7 @@ Then use either:
 ```bash
 python -m venv venv && venv\Scripts\activate
 pip install -r requirements.txt
-python main.py             # Flask GUI + voice listener (existing flow)
+python app.py             # Flask GUI + voice listener (existing flow)
 # or
 uvicorn api.mobile_api:app --reload   # mobile API only
 # or

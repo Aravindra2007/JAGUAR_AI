@@ -202,8 +202,18 @@ def get_llm_config():
 
 
 # ---------------------------------
-# Pending confirmations (tool-use)
-# ---------------------------------
+_current_listener = None
+
+
+def set_listener(listener):
+    global _current_listener
+    with _lock:
+        _current_listener = listener
+
+
+def get_listener():
+    with _lock:
+        return _current_listener# ---------------------------------
 
 def push_pending_confirmation(token, envelope):
     with _lock:

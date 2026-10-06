@@ -38,7 +38,7 @@ pip install -r requirements.txt
 playwright install chromium          # optional, for browser automation
 
 # Existing GUI + voice listener
-python main.py                       # then open http://127.0.0.1:5000
+python app.py                       # then open http://127.0.0.1:5000
 
 # Mobile-ready API (Swagger at /docs, ReDoc at /redoc)
 uvicorn api.mobile_api:app --reload  # then open http://127.0.0.1:8000/docs

@@ -65,6 +65,7 @@ init_auth(app)
 
 router = CommandRouter()
 listener = VoiceListener()
+state.set_listener(listener)
 listener.start()   # starts the background thread (mic stays idle until /start is called)
 
 # Optional: mount the FastAPI mobile API inside the Flask app at
