@@ -311,8 +311,9 @@
 
     <div class="sidebar-section-label">Session</div>
     <button class="ctl" id="btn-llm-config" style="width:100%;">🧠 LLM Configuration</button>
+    <button class="ctl" id="btn-launch-overlay" style="width:100%;">🚀 Launch Overlay</button>
     <button class="ctl" id="btn-clear" style="width:100%;">🗑️ Clear conversation</button>
-    
+
 
     <div class="sidebar-footer">
       <div class="user-row">
@@ -343,7 +344,7 @@
       <div class="composer-inner">
         <div class="input-row">
           <button class="icon-btn" id="btn-attach" title="Attach a file or image">📎</button>
-          <textarea id="text-input" rows="1" placeholder="Message Jaguar AI..."></textarea>
+          <textarea id="text-input" rows="1" placeholder="Ask Jaguar AI..."></textarea>
           <button class="icon-btn send" id="btn-send" title="Send">➤</button>
         </div>
         <div class="composer-hint">Jaguar can read PDFs, Word docs, and images you attach — ask it to summarize or quiz you on them.</div>
@@ -518,6 +519,17 @@ document.getElementById('btn-clear').onclick = async () => {
   await fetch('/clear', {method:'POST'});
   document.querySelectorAll('.msg, .confirm-card, .attach-chip').forEach(el => el.remove());
   emptyState.style.display = 'flex';
+};
+
+document.getElementById('btn-launch-overlay').onclick = async () => {
+  try {
+    const res = await fetch('/launch-overlay', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to launch overlay');
+    console.log('Overlay launched successfully');
+  } catch (e) {
+    addMessage('assistant', '❌ ' + e.message);
+  }
 };
 
 // ---------------- Status polling ----------------

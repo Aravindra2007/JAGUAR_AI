@@ -437,8 +437,41 @@ class JaguarOverlay:
     # ==========================================================
 
     def build_square_ui(self):
-
         self.clear_frame()
+
+        # --- Top Control Bar (Close & Minimize) ---
+        ctrl_bar = tk.Frame(self.frame, bg="#101820")
+        ctrl_bar.pack(fill="x", pady=(0, 0))
+
+        close_btn = tk.Button(
+            ctrl_bar,
+            text="✕",
+            command=self.close_app,
+            font=("Segoe UI", 10, "bold"),
+            fg="#78909c",
+            bg="#101820",
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            activeforeground="white",
+            activebackground="#9b2c2c"
+        )
+        close_btn.pack(side="right", padx=5)
+
+        min_btn = tk.Button(
+            ctrl_bar,
+            text="−",
+            command=self.minimize_app,
+            font=("Segoe UI", 10, "bold"),
+            fg="#78909c",
+            bg="#101820",
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            activeforeground="white",
+            activebackground="#263238"
+        )
+        min_btn.pack(side="right", padx=5)
 
         self.canvas = tk.Canvas(
             self.frame,
@@ -456,15 +489,13 @@ class JaguarOverlay:
         # LOGO
         # ------------------------------------------------------
 
-        logo_path = "jaguar_logo.png"
+        logo_path = "static/icon.png"
 
         if os.path.exists(logo_path):
-
             self.logo_img = self.create_circle_image(
                 logo_path,
                 (76, 76)
             )
-
             self.canvas.create_image(
                 65,
                 65,
@@ -1028,23 +1059,21 @@ class JaguarOverlay:
     # ==========================================================
 
     def close_app(self, event=None):
-
         if self.running:
-
             self.stop_jaguar()
-
         if self.root:
-
             self.root.destroy()
+
+    def minimize_app(self):
+        if self.root:
+            self.root.withdraw()
 
     # ==========================================================
     # RUN
     # ==========================================================
 
     def run(self):
-
         self.create_overlay()
-
         self.root.mainloop()
 
 
@@ -1072,9 +1101,8 @@ def stop_jaguar_voice():
 
 
 # ==============================================================
-# CREATE OVERLAY
+# CREATE OVERLAY INSTANCE (Optional - for status updates)
 # ==============================================================
-
 overlay_instance = JaguarOverlay(
     start_callback=start_jaguar_voice,
     stop_callback=stop_jaguar_voice
@@ -1087,8 +1115,15 @@ overlay_instance = JaguarOverlay(
 
 def start_overlay():
 
+    def run_instance():
+        instance = JaguarOverlay(
+            start_callback=start_jaguar_voice,
+            stop_callback=stop_jaguar_voice
+        )
+        instance.run()
+
     thread = Thread(
-        target=overlay_instance.run,
+        target=run_instance,
         daemon=True
     )
 

@@ -36,9 +36,6 @@ def run_flask():
 # -----------------------------
 if __name__ == "__main__":
 
-    # Start Desktop Overlay
-    overlay.start_overlay()
-
     # Start Reminder Service (Phase 2 Proactive Agent)
     reminder_manager.start_reminder_service()
 

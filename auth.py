@@ -18,6 +18,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 
 import db
 import state
+import random
+import email_utils
 
 auth_bp = Blueprint("auth", __name__)
 login_manager = LoginManager()
@@ -68,6 +70,15 @@ def register():
 
         try:
             row = db.create_user(username, email, password, full_name=full_name)
+
+            # Generate and send OTP
+            otp = f"{random.randint(100000, 999999)}"
+            db.save_otp(row["id"], otp)
+            email_utils.send_otp_email(email, otp)
+
+            session["verify_user_id"] = row["id"]
+            flash("Account created! Please check your email for a verification code.", "info")
+            return redirect(url_for("auth.verify"))
         except db.DBError as e:
             flash(str(e), "error")
             return render_template("register.html")
@@ -102,6 +113,10 @@ def login():
             flash("Invalid username/email or password.", "error")
             return render_template("login.html")
 
+        if not row.get("verified"):
+            flash("Please verify your email before logging in.", "error")
+            return redirect(url_for("auth.verify"))
+
         login_user(User(row), remember=True)
         state.set_current_user(row["id"], row["username"])
         return redirect(url_for("home"))
@@ -116,3 +131,43 @@ def logout():
     logout_user()
     session.clear()
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/verify", methods=["GET", "POST"])
+def verify():
+    user_id = session.get("verify_user_id")
+    if not user_id:
+        flash("No verification session found. Please register again.", "error")
+        return redirect(url_for("auth.register"))
+
+    # Get user for resend logic
+    user = db.get_user_by_id(user_id)
+    if not user:
+        session.pop("verify_user_id", None)
+        flash("Account not found. Please register again.", "error")
+        return redirect(url_for("auth.register"))
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "resend":
+            otp = f"{random.randint(100000, 999999)}"
+            db.save_otp(user_id, otp)
+            email_utils.send_otp_email(user["email"], otp)
+            flash("A new verification code has been sent to your email.", "info")
+            return render_template("verify.html")
+
+        otp = request.form.get("otp", "").strip()
+        if not otp:
+            flash("Please enter the OTP code.", "error")
+            return render_template("verify.html")
+
+        if db.verify_otp(user_id, otp):
+            flash("Email verified successfully! You can now log in.", "success")
+            session.pop("verify_user_id", None)
+            return redirect(url_for("auth.login"))
+        else:
+            flash("Invalid or expired OTP code.", "error")
+            return render_template("verify.html")
+
+    return render_template("verify.html")

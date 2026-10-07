@@ -19,6 +19,7 @@ import languages
 import db
 import file_reader
 from auth import init_auth
+from overlay import start_overlay
 
 # New autonomous-agent core (graceful when optional deps are missing)
 try:
@@ -233,6 +234,16 @@ def mute():
 def stop_speaking_route():
     stop_speaking()
     return jsonify({"success": True})
+
+
+@app.route("/launch-overlay", methods=["POST"])
+@login_required
+def launch_overlay_route():
+    try:
+        start_overlay()
+        return jsonify({"success": True, "message": "Overlay launched successfully"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ---------------------------------

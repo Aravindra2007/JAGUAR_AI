@@ -1,52 +1,86 @@
+# ============================================================================
+# JAGUAR AI — PRODUCTION REQUIREMENTS
+# ============================================================================
+
 
 # ============================================================================
-# JAGUAR AI — production requirements
+# CORE GUI / FLASK
 # ============================================================================
-# Core GUI (Flask)
+
 Flask
 flask-login
 python-dotenv
 Werkzeug
 itsdangerous
 
-# Voice I/O
+
+# ============================================================================
+# VOICE I/O
+# ============================================================================
+
 SpeechRecognition
 pyttsx3
 PyAudio            # optional - the listener falls back if it can't be imported
 pygame             # replaces playsound so the Stop button really interrupts TTS
 gTTS
 
-# System automation
+
+# ============================================================================
+# SYSTEM AUTOMATION
+# ============================================================================
+
 pyautogui
 pywhatkit
 pyperclip
 psutil
 
-# File / image reading
+
+# ============================================================================
+# FILE / IMAGE READING
+# ============================================================================
+
 PyPDF2
 python-docx
 pytesseract
 Pillow
 
-# Firebase persistence
+
+# ============================================================================
+# FIREBASE PERSISTENCE
+# ============================================================================
+
 firebase-admin
 
-# Streamlit alternative UI
+
+# ============================================================================
+# STREAMLIT ALTERNATIVE UI
+# ============================================================================
+
 streamlit
 streamlit-autorefresh
 PyQt6
 
-# Multi-LLM
+
+# ============================================================================
+# MULTI-LLM
+# ============================================================================
+
 openai
 anthropic
 google-generativeai
 ollama
 
-# ============================================================
-# NEW: Autonomous Agent + Mobile-Ready Backend (JAGUAR AI v2)
-# ============================================================
 
-# FastAPI mobile-ready backend (run with: uvicorn api.mobile_api:app)
+# ============================================================================
+# NEW: AUTONOMOUS AGENT + MOBILE-READY BACKEND (JAGUAR AI v2)
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# FASTAPI MOBILE-READY BACKEND
+# Run with: uvicorn api.mobile_api:app
+# ----------------------------------------------------------------------------
+
 fastapi
 a2wsgi
 uvicorn[standard]
@@ -54,97 +88,105 @@ pydantic
 python-multipart     # for /voice file uploads
 httpx                 # used by some test scripts
 
-# Vector memory (semantic recall)
+
+# ----------------------------------------------------------------------------
+# VECTOR MEMORY — SEMANTIC RECALL
+# ----------------------------------------------------------------------------
+
 sentence-transformers   # embedder; falls back to hashed BoW if missing
 numpy                   # required by faiss
 
-# Pick ONE of these for the vector index. Both have graceful fallback
-# to an in-memory cosine index if neither is installed.
-faiss-cpu               # local, fast, file-based
-# chromadb               # persistent client/server - uncomment if you prefer
 
-# Browser automation (Playwright). Install browsers separately with:
+# ----------------------------------------------------------------------------
+# VECTOR INDEX
+# Pick ONE of these for the vector index.
+# Both have graceful fallback to an in-memory cosine index if neither
+# is installed.
+# ----------------------------------------------------------------------------
+
+faiss-cpu               # local, fast, file-based
+# chromadb              # persistent client/server - uncomment if you prefer
+
+
+# ----------------------------------------------------------------------------
+# BROWSER AUTOMATION
+# ----------------------------------------------------------------------------
+
+# Playwright
+# Install browsers separately with:
 #     playwright install chromium
+
 playwright
 
-# Voice: STT (Whisper) and high-quality TTS
+
+# ----------------------------------------------------------------------------
+# VOICE — STT (WHISPER) + HIGH-QUALITY TTS
+# ----------------------------------------------------------------------------
+
 openai-whisper          # heavy; offline-capable once installed
 edge-tts                # lightweight TTS using Microsoft Edge voices
-=======
 
 
 
+# ============================================================================
+# BACKEND
+# ============================================================================
 
-# # --- Backend ---
-
- Flask
- SpeechRecognition
- pyttsx3
- pyautogui
- pywhatkit
- #PyAudio
- # # --- Streamlit frontend ---
- streamlit
- streamlit-autorefresh
-
- # # --- LLM fallback (router.py sends unmatched commands here) ---
- openai
- anthropic
- ollama
- google-generativeai
-
-# # # --- Text-to-speech ---
- gTTS
- # pygame            # replaces playsound: needed so Stop can interrupt gTTS playback mid-clip
-
-# # # --- MySQL + accounts ---
- PyMySQL
- flask-login
- python-dotenv
-
-# # # --- File upload reading (docs/images for tasking) ---
- PyPDF2
- python-docx
- pytesseract       # optional OCR for images; also requires the Tesseract engine installed on the OS
- Pillow
+Flask
+SpeechRecognition
+pyttsx3
+pyautogui
+pywhatkit
+#PyAudio
 
 
 
-# # # --- Backend ---
-# # Flask
-# # flask-login
-# # python-dotenv
-# # PyMySQL
+# ============================================================================
+# STREAMLIT FRONTEND
+# ============================================================================
 
-# # # --- Frontend ---
-# # streamlit
-# # streamlit-autorefresh
-
-# # # --- LLM APIs ---
-# # openai
-# # anthropic
-# # ollama
-# # google-generativeai
-
-# # # --- File Processing ---
-# # PyPDF2
-# # python-docx
-# # pytesseract
-# # Pillow
-
-# # # --- Optional TTS (cloud-safe) ---
-# # gTTS
+streamlit
+streamlit-autorefresh
 
 
 
+# ============================================================================
+# LLM FALLBACK
+# router.py sends unmatched commands here
+# ============================================================================
+
+openai
+anthropic
+ollama
+google-generativeai
 
 
 
+# ============================================================================
+# TEXT-TO-SPEECH
+# ============================================================================
+
+gTTS
+# pygame            # replaces playsound: needed so Stop can interrupt gTTS playback mid-clip
 
 
 
+# ============================================================================
+# MYSQL + ACCOUNTS
+# ============================================================================
+
+PyMySQL
+flask-login
+python-dotenv
 
 
 
+# ============================================================================
+# FILE UPLOAD READING
+# Docs / Images for tasking
+# ============================================================================
 
-
+PyPDF2
+python-docx
+pytesseract       # optional OCR for images; also requires the Tesseract engine installed on the OS
+Pillow

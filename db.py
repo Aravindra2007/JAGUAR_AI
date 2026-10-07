@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 import firebase_admin
@@ -123,6 +123,7 @@ def create_user(username: str, email: str, password: str,
         "role": role,
         "created_at": _now(),
         "last_login_at": None,
+        "verified": False,
     }
     _user_ref(user_id).set({key: value for key, value in row.items() if key != "id"})
     return row
@@ -145,6 +146,35 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     return _find_user("username", username)
+
+
+def save_otp(user_id: str, otp_code: str, expiry_minutes: int = 10):
+    """Stores the OTP and its expiration time in the user document."""
+    expiry_time = _now() + timedelta(minutes=expiry_minutes)
+    _user_ref(user_id).update({
+        "otp_code": otp_code,
+        "otp_expires_at": expiry_time
+    })
+
+
+def verify_otp(user_id: str, otp_code: str) -> bool:
+    """Checks if the OTP is correct and not expired."""
+    user = get_user_by_id(user_id)
+    if not user:
+        return False
+
+    stored_otp = user.get("otp_code")
+    expiry = user.get("otp_expires_at")
+
+    if stored_otp == otp_code and expiry and expiry > _now():
+        _user_ref(user_id).update({
+            "verified": True,
+            "otp_code": None,
+            "otp_expires_at": None
+        })
+        return True
+    return False
+
 
 
 # Chat history
