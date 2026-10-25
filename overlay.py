@@ -1,269 +1,6 @@
 
 
 
-
-# import tkinter as tk
-# from threading import Thread
-# from PIL import Image, ImageTk, ImageDraw
-# import os
-
-# class JaguarOverlay:
-#     def __init__(self):
-#         self.root = None
-#         self.status_label = None
-#         self.canvas = None
-#         self.logo_img = None
-
-#         # Animation
-#         self.ring = None
-#         self.ring_radius = 40
-#         self.pulse_direction = 1
-#         self.is_listening = False
-
-#         # Drag
-#         self.offset_x = 0
-#         self.offset_y = 0
-
-#         self.status = "Idle"
-
-#         self.status_colors = {
-#             "Idle": "#2c3e50",
-#             "Listening...": "#27ae60",
-#             "Processing...": "#e67e22",
-#             "Awaiting confirmation...": "#f1c40f",
-#             "Offline": "#c0392b",
-#         }
-
-#     # -------------------------------
-#     # 🟢 Circle Image Creator
-#     # -------------------------------
-#     def create_circle_image(self, path, size=(70, 70)):
-#         img = Image.open(path).resize(size).convert("RGBA")
-
-#         mask = Image.new("L", size, 0)
-#         draw = ImageDraw.Draw(mask)
-#         draw.ellipse((0, 0, size[0], size[1]), fill=255)
-
-#         img.putalpha(mask)
-#         return ImageTk.PhotoImage(img)
-
-#     # -------------------------------
-#     # 🟢 UI Setup
-#     # -------------------------------
-#     def create_overlay(self):
-#         self.root = tk.Tk()
-#         self.root.overrideredirect(True)
-#         self.root.attributes("-topmost", True)
-#         self.root.attributes("-alpha", 0.95)
-
-#         width, height = 200, 220
-
-#         screen_width = self.root.winfo_screenwidth()
-#         x = screen_width - width - 30
-#         y = 80
-
-#         self.root.geometry(f"{width}x{height}+{x}+{y}")
-#         self.root.configure(bg="#121212")
-
-#         frame = tk.Frame(self.root, bg="#121212")
-#         frame.pack(expand=True, fill="both")
-
-#         # -------------------------------
-#         # 🎨 CANVAS (Logo + Animation)
-#         # -------------------------------
-#         self.canvas = tk.Canvas(
-#             frame,
-#             width=120,
-#             height=120,
-#             bg="#121212",
-#             highlightthickness=0
-#         )
-#         self.canvas.pack(pady=(10, 5))
-
-#         logo_path = "static/icon.png"
-
-#         if os.path.exists(logo_path):
-#             self.logo_img = self.create_circle_image(logo_path, (70, 70))
-#             self.canvas.create_image(60, 60, image=self.logo_img)
-#         else:
-#             self.canvas.create_text(
-#                 60, 60,
-#                 text="🐆",
-#                 font=("Segoe UI", 28),
-#                 fill="#20e6d7"
-#             )
-
-#         # Glow ring
-#         self.ring = self.canvas.create_oval(
-#             20, 20, 100, 100,
-#             outline="#20e6d7",
-#             width=2,
-#             state="hidden"
-#         )
-
-#         # -------------------------------
-#         # 🏷️ TITLE
-#         # -------------------------------
-#         tk.Label(
-#             frame,
-#             text="Jaguar AI",
-#             font=("Orbitron", 12, "bold"),
-#             fg="#20e6d7",
-#             bg="#121212"
-#         ).pack(pady=(0, 10))
-
-#         # -------------------------------
-#         # 📊 STATUS
-#         # -------------------------------
-#         self.status_label = tk.Label(
-#             frame,
-#             text="● Idle",
-#             font=("Segoe UI", 10, "bold"),
-#             fg="white",
-#             bg=self.status_colors["Idle"],
-#             padx=10,
-#             pady=5
-#         )
-#         self.status_label.pack(pady=(5, 15))
-
-#         # -------------------------------
-#         # 🖱️ DRAG SUPPORT
-#         # -------------------------------
-#         self.root.bind("<Button-1>", self.start_drag)
-#         self.root.bind("<B1-Motion>", self.do_drag)
-
-#         # -------------------------------
-#         # 🖱️ CLICK ACTIONS
-#         # -------------------------------
-#         self.root.bind("<Button-3>", self.close_app)  # Right click
-#         self.root.bind("<Double-Button-1>", self.toggle_status)  # Double click
-
-#     # -------------------------------
-#     # 🟢 Animation
-#     # -------------------------------
-#     def animate_ring(self):
-#         if not self.is_listening:
-#             return
-
-#         self.ring_radius += self.pulse_direction * 2
-
-#         if self.ring_radius > 50 or self.ring_radius < 35:
-#             self.pulse_direction *= -1
-
-#         x0 = 60 - self.ring_radius
-#         y0 = 60 - self.ring_radius
-#         x1 = 60 + self.ring_radius
-#         y1 = 60 + self.ring_radius
-
-#         self.canvas.coords(self.ring, x0, y0, x1, y1)
-
-#         # Glow color variation
-#         intensity = int(150 + (self.ring_radius - 35) * 5)
-#         intensity = max(0, min(255, intensity))
-#         color = f"#20e6{intensity:02x}"
-
-#         self.canvas.itemconfig(self.ring, outline=color)
-
-#         self.root.after(50, self.animate_ring)
-
-#     # -------------------------------
-#     # 🟢 Update Status
-#     # -------------------------------
-#     def update_status(self, status):
-#         self.status = status
-
-#         if not self.status_label:
-#             return
-
-#         color = self.status_colors.get(status, "#2c3e50")
-#         self.status_label.config(text=f"● {status}", bg=color)
-
-#         if status == "Listening...":
-#             self.is_listening = True
-#             self.canvas.itemconfig(self.ring, state="normal")
-#             self.animate_ring()
-#         else:
-#             self.is_listening = False
-#             self.canvas.itemconfig(self.ring, state="hidden")
-
-#     # -------------------------------
-#     # 🟢 Drag Functions
-#     # -------------------------------
-#     def start_drag(self, event):
-#         self.offset_x = event.x
-#         self.offset_y = event.y
-
-#     def do_drag(self, event):
-#         x = self.root.winfo_x() + event.x - self.offset_x
-#         y = self.root.winfo_y() + event.y - self.offset_y
-#         self.root.geometry(f"+{x}+{y}")
-
-#     # -------------------------------
-#     # 🟢 Click Actions
-#     # -------------------------------
-#     def toggle_status(self, event=None):
-#         if self.status == "Idle":
-#             self.update_status("Listening...")
-#         else:
-#             self.update_status("Idle")
-
-#     def close_app(self, event=None):
-#         self.root.destroy()
-
-#     # -------------------------------
-#     def run(self):
-#         self.create_overlay()
-#         self.root.mainloop()
-
-
-# # -------------------------------
-# # 🔁 Singleton + Thread
-# # -------------------------------
-# overlay_instance = JaguarOverlay()
-
-# def start_overlay():
-#     t = Thread(target=overlay_instance.run, daemon=True)
-#     t.start()
-
-# def update_overlay(status):
-#     overlay_instance.update_status(status)
-
-
-# # -------------------------------
-# # 🚀 RUN (for testing)
-# # -------------------------------
-# if __name__ == "__main__":
-#     start_overlay()
-
-#     import time
-#     time.sleep(2)
-#     update_overlay("Listening...")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import tkinter as tk
 from threading import Thread
 from PIL import Image, ImageTk, ImageDraw
@@ -345,6 +82,7 @@ class JaguarOverlay:
 
         # Remove title bar
         self.root.overrideredirect(True)
+        self.root.bind("<Map>", self.restore_window)
 
         # Always on top
         self.root.attributes("-topmost", True)
@@ -746,7 +484,7 @@ class JaguarOverlay:
         self.collapse_button = tk.Button(
             controls,
             text="−",
-            command=self.collapse,
+            command=self.minimize_app,
             font=("Segoe UI", 13, "bold"),
             fg="#20e6d7",
             bg="#18242c",
@@ -763,6 +501,37 @@ class JaguarOverlay:
             column=2,
             padx=(8, 0)
         )
+
+        # close button
+        self.close_button = tk.Button(
+            controls,
+            text="✕",
+            command=self.close_app,
+            font=("Segoe UI", 13, "bold"),
+            fg="#78909c",
+            bg="#18242c",
+            activebackground="#22333d",
+            activeforeground="#9b2c2c",
+            relief="flat",
+            bd=0,
+            width=3,
+            cursor="hand2" 
+        )
+        self.close_button.grid(
+            row=0,
+            column=3,
+            padx=(4, 0)
+        )
+
+    # ==========================================================
+    # RESTORE WINDOW
+    # ==========================================================
+
+    def restore_window(self, event=None):
+        if self.root and self.root.state() == "normal":
+            self.root.after_idle(
+                lambda: self.root.overrideredirect(True)
+            )
 
     # ==========================================================
     # CLEAR FRAME
@@ -939,10 +708,13 @@ class JaguarOverlay:
                 )
 
                 if action == "status":
+                    self.update_status_internal(value)
 
-                    self.update_status_internal(
-                        value
-                    )
+                elif action == "show":
+                    self.show_overlay()
+
+                elif action == "hide":
+                    self.root.withdraw()
 
         except queue.Empty:
             pass
@@ -1059,14 +831,17 @@ class JaguarOverlay:
     # ==========================================================
 
     def close_app(self, event=None):
-        if self.running:
-            self.stop_jaguar()
         if self.root:
-            self.root.destroy()
+            self.root.withdraw()
+
+    # ==========================================================
+    # MINIMIZE
+    # ==========================================================
 
     def minimize_app(self):
         if self.root:
-            self.root.withdraw()
+            self.root.overrideredirect(False)
+            self.root.iconify()
 
     # ==========================================================
     # RUN
@@ -1075,6 +850,16 @@ class JaguarOverlay:
     def run(self):
         self.create_overlay()
         self.root.mainloop()
+
+
+    # ==========================================================
+    # SHOW OVERLAY
+    # ==========================================================
+    def show_overlay(self):
+        if self.root:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.attributes("-topmost", True)
 
 
 # ==============================================================
@@ -1114,31 +899,20 @@ overlay_instance = JaguarOverlay(
 # ==============================================================
 
 def start_overlay():
+    if overlay_instance.root is None:
+        overlay_instance.run()
+    else:
+        overlay_instance.show_overlay()
 
-    def run_instance():
-        instance = JaguarOverlay(
-            start_callback=start_jaguar_voice,
-            stop_callback=stop_jaguar_voice
-        )
-        instance.run()
-
-    thread = Thread(
-        target=run_instance,
-        daemon=True
-    )
-
-    thread.start()
 
 
 # ==============================================================
 # UPDATE OVERLAY FROM JAGUAR
 # ==============================================================
 
-def update_overlay(status):
 
-    overlay_instance.update_status(
-        status
-    )
+def update_overlay(status):
+    overlay_instance.update_status(status)
 
 
 # ==============================================================
