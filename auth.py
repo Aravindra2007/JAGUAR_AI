@@ -126,22 +126,9 @@ def login():
     return render_template("login.html")
 
 
-
-# @auth_bp.route("/logout", methods=["POST"])
-# @login_required
-# def logout():
-#     # Clear Jaguar AI's active user
-#     state.set_current_user(None, None)
-
-#     # End Flask-Login session
-#     logout_user()
-
-#     # Clear session data
-#     session.clear()
-
-#     flash("You have been logged out successfully.", "success")
-
-#     return redirect(url_for("auth.login"))
+# ==========================
+# Logout
+# =========================
 
 @auth_bp.route("/logout", methods=["POST"])
 @login_required
