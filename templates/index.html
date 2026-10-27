@@ -172,6 +172,8 @@
   .composer-hint{ font-size:11px; color:var(--muted); text-align:center; margin-top:8px; }
   #file-input{ display:none; }
 
+  
+
   /* FULL SCREEN OVERLAY */
   #ai-overlay {
     position: fixed;
@@ -218,6 +220,21 @@
     border: 2px solid rgba(32,230,215,0.6);
     animation: pulse 1.5s infinite;
   }
+
+  .logout-btn {
+    background: transparent;
+    border: none;
+    color: #7f93a3;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .logout-btn:hover {
+      color: #ff5c72;
+  }
+
+  
 
   @keyframes pulse {
     0% {
@@ -316,11 +333,22 @@
 
 
     <div class="sidebar-footer">
-      <div class="user-row">
-        <div class="user-avatar">{{ (full_name or username)[0]|upper }}</div>
-        <div>{{ full_name or username }}</div>
-        <a href="{{ url_for('auth.logout') }}">Log out</a>
-      </div>
+        <div class="user-row">
+            <div class="user-avatar">
+                {{ (full_name or username)[0]|upper }}
+            </div>
+
+            <div>{{ full_name or username }}</div>
+
+            <form action="{{ url_for('auth.logout') }}"
+                  method="POST"
+                  style="margin-left:auto;">
+
+                <button type="submit" class="logout-btn">
+                    Log out
+                </button>
+            </form>
+        </div>
     </div>
   </div>
 

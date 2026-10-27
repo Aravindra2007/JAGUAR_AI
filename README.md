@@ -530,6 +530,16 @@ Includes:
 
 ### Cloud Deployment
 
+#### Firestore Indexes
+
+The chat history and uploaded-file queries use a user filter with a creation-time sort. Deploy the required composite indexes from this repository before using those queries:
+
+```bash
+firebase deploy --only firestore:indexes --project jaguarai-def91
+```
+
+Firestore may take a few minutes to build the indexes after deployment. The history endpoint falls back to in-memory history until its index is ready.
+
 #### Fly.io (Recommended)
 
 ```bash

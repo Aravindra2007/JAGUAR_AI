@@ -8,7 +8,7 @@ is ever kept in memory or in state.py.
 Blueprint routes:
     GET/POST /login
     GET/POST /register
-    GET      /logout
+    POST      /logout
 """
 
 from __future__ import annotations
@@ -45,6 +45,8 @@ def load_user(user_id):
     if not row:
         return None
     return User(row)
+
+
 
 
 def init_auth(app):
@@ -124,13 +126,48 @@ def login():
     return render_template("login.html")
 
 
-@auth_bp.route("/logout")
+
+# @auth_bp.route("/logout", methods=["POST"])
+# @login_required
+# def logout():
+#     # Clear Jaguar AI's active user
+#     state.set_current_user(None, None)
+
+#     # End Flask-Login session
+#     logout_user()
+
+#     # Clear session data
+#     session.clear()
+
+#     flash("You have been logged out successfully.", "success")
+
+#     return redirect(url_for("auth.login"))
+
+@auth_bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
+    
+
+    # Clear Jaguar AI state
     state.set_current_user(None, None)
+
+    # Remove Flask-Login authentication
     logout_user()
+
+    # Clear session
     session.clear()
-    return redirect(url_for("auth.login"))
+
+    response = redirect(url_for("auth.login"))
+
+    # Explicitly expire the remember-me cookie
+    response.delete_cookie(
+        "remember_token",
+        path="/"
+    )
+
+    
+
+    return response
 
 
 @auth_bp.route("/verify", methods=["GET", "POST"])

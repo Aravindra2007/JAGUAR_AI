@@ -35,3 +35,5 @@ jaguar_data/
 !composer.json
 # Specifically ignore firebase keys
 *adminsdk*.json
+!firebase.json
+!firestore.indexes.json
