@@ -660,6 +660,95 @@
     animation: overlayPulse 1.5s infinite;
   }
 
+  /* ================= USER PROFILE ================= */
+
+  .sidebar-footer .user-row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+  }
+
+  .profile-trigger {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px;
+      background: #0a1017;
+      border: 1px solid #1c2733;
+      border-radius: 10px;
+      text-decoration: none;
+      color: #e7eef4;
+      transition: 0.2s ease;
+      cursor: pointer;
+  }
+
+  .profile-trigger:hover {
+      border-color: #20e6d7;
+      background: #102029;
+  }
+
+  .profile-trigger .user-avatar {
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      overflow: hidden;
+  }
+
+  .user-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+  }
+
+  .profile-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      gap: 3px;
+  }
+
+  .profile-name {
+      font-size: 12px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+  }
+
+  .profile-subtitle {
+      font-size: 10px;
+      color: #7f93a3;
+  }
+
+  .profile-arrow {
+      margin-left: auto;
+      color: #20e6d7;
+      font-size: 20px;
+  }
+
+  .sidebar-footer form {
+      width: 100%;
+  }
+
+  .logout-btn {
+      width: 100%;
+      padding: 7px;
+      background: transparent;
+      border: 1px solid #1c2733;
+      border-radius: 8px;
+      color: #7f93a3;
+      cursor: pointer;
+      font-size: 12px;
+  }
+
+  .logout-btn:hover {
+      border-color: #ff5c72;
+      color: #ff5c72;
+  }
+
   @keyframes overlayPulse {
     0% {
       transform: scale(0.8);
@@ -820,26 +909,45 @@
     🗑️ Clear Conversation
   </button>
 
-  <!-- FOOTER -->
+ 
 
   <div class="sidebar-footer">
 
     <div class="user-row">
 
-      <div class="user-avatar">
-        {{ (full_name or username)[0]|upper }}
-      </div>
+      <!-- CLICKABLE PROFILE -->
+      <a href="{{ url_for('auth.profile') }}" class="profile-trigger">
 
-      <div>{{ full_name or username }}</div>
+        <div class="user-avatar">
+          {% if profile_photo %}
+            <img
+              src="{{ url_for('static', filename=profile_photo) }}"
+              alt="Profile Photo"
+            >
+          {% else %}
+            {{ (full_name or username)[0]|upper }}
+          {% endif %}
+        </div>
 
-      <form action="{{ url_for('auth.logout') }}"
-            method="POST"
-            style="margin-left:auto;">
+        <div class="profile-info">
+          <span class="profile-name">
+            {{ full_name or username }}
+          </span>
 
+          <span class="profile-subtitle">
+            View Profile
+          </span>
+        </div>
+
+        <span class="profile-arrow">›</span>
+
+      </a>
+
+      <!-- LOGOUT -->
+      <form action="{{ url_for('auth.logout') }}" method="POST">
         <button type="submit" class="logout-btn">
           Log out
         </button>
-
       </form>
 
     </div>

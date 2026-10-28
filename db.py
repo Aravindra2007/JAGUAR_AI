@@ -238,3 +238,62 @@ def get_uploaded_files(user_id: str, limit: int = 25) -> List[Dict[str, Any]]:
                  .order_by("created_at", direction=firestore.Query.DESCENDING)
                  .limit(limit).stream())
     return [{"id": snapshot.id, **snapshot.to_dict()} for snapshot in snapshots]
+
+
+
+# ==========================
+# User profile management
+# ==========================
+
+def update_user_profile(user_id: str, full_name: str) -> None:
+    full_name = (full_name or "").strip()
+
+    if not full_name or len(full_name) > 100:
+        raise DBError("Full name must contain 1–100 characters.")
+
+    if not get_user_by_id(user_id):
+        raise DBError("Account not found.")
+
+    _user_ref(user_id).update({
+        "full_name": full_name,
+        "updated_at": _now()
+    })
+
+
+def update_profile_photo(user_id: str, photo_path: str) -> None:
+    if not get_user_by_id(user_id):
+        raise DBError("Account not found.")
+
+    _user_ref(user_id).update({
+        "profile_photo": photo_path,
+        "updated_at": _now()
+    })
+
+
+def change_user_password(
+    user_id: str,
+    current_password: str,
+    new_password: str
+) -> None:
+    user = get_user_by_id(user_id)
+
+    if not user:
+        raise DBError("Account not found.")
+
+    if not check_password_hash(
+        user.get("password_hash", ""),
+        current_password or ""
+    ):
+        raise DBError("Current password is incorrect.")
+
+    if len(new_password) < 8:
+        raise DBError("New password must be at least 8 characters.")
+
+    if check_password_hash(user["password_hash"], new_password):
+        raise DBError("New password must differ from the current password.")
+
+    _user_ref(user_id).update({
+        "password_hash": generate_password_hash(new_password),
+        "password_changed_at": _now()
+    })
+
