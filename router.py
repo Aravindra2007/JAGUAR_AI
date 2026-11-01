@@ -101,6 +101,10 @@ class CommandRouter:
             return "I didn't hear any command."
 
         text = text.lower().strip()
+        if state.has_pending_attachment():
+            result = self._ask_llm(text)
+            self._persist(text, result)
+            return result
 
         # Use the NLU system to parse intent and slots
         nlu_result = self.nlu.parse(text)

@@ -22,6 +22,7 @@ Thumbs.db
 
 # Project Specific
 uploads/
+static/profile_photos/
 reminders.json
 jaguar_data/
 *.log

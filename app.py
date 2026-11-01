@@ -1,4 +1,5 @@
 import os
+from db import save_uploaded_file
 import uuid
 
 try:
@@ -248,60 +249,89 @@ def launch_overlay_route():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+
 # ---------------------------------
-# File / Image Upload (for reading + tasking)
+# File / Image Upload (Supabase)
 # ---------------------------------
-# Accepts a document or image, extracts whatever text it can, stores
-# both the file and the extracted text in MySQL, and stashes the
-# extracted text as "pending attachment context" so the user's very
-# next message (typed OR spoken) is answered with that content in
-# mind - e.g. "summarize this", "what's the answer to question 3".
 
 @app.route("/upload", methods=["POST"])
 @login_required
 def upload():
     if "file" not in request.files:
-        return jsonify({"success": False, "error": "No file included in the request."}), 400
+        return jsonify({
+            "success": False,
+            "error": "No file included in the request."
+        }), 400
 
     upload_file = request.files["file"]
+
     if not upload_file or upload_file.filename == "":
-        return jsonify({"success": False, "error": "No file selected."}), 400
+        return jsonify({
+            "success": False,
+            "error": "No file selected."
+        }), 400
 
     filename = secure_filename(upload_file.filename)
     ext = os.path.splitext(filename)[1].lower()
+
     if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         return jsonify({
             "success": False,
-            "error": f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}",
+            "error": f"Unsupported file type: {ext}"
         }), 400
 
-    user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))
-    os.makedirs(user_dir, exist_ok=True)
-
-    unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
-    save_path = os.path.join(user_dir, unique_name)
-    upload_file.save(save_path)
-
-    extracted_text = file_reader.extract_text(save_path)
-    attachment_context = file_reader.build_attachment_context(filename, extracted_text)
-    state.set_pending_attachment(attachment_context)
-
     try:
-        db.save_uploaded_file(
-            int(current_user.id), filename, save_path,
-            filetype=ext.lstrip("."), extracted_text=extracted_text,
+        # Read file for text extraction
+        upload_file.stream.seek(0)
+
+        # Extract text using a temporary local file
+        user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))
+        os.makedirs(user_dir, exist_ok=True)
+
+        unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
+        save_path = os.path.join(user_dir, unique_name)
+
+        upload_file.save(save_path)
+
+        extracted_text = file_reader.extract_text(save_path)
+        
+        attachment_context = file_reader.build_attachment_context(
+            filename, extracted_text
         )
+        state.set_pending_attachment(attachment_context)
+
+        # Upload the original file to Supabase and save metadata
+        with open(save_path, "rb") as file_data:
+            file_id = db.save_uploaded_file(
+                user_id=str(current_user.id),
+                filename=filename,
+                filepath=save_path,
+                filetype=ext.lstrip("."),
+                extracted_text=extracted_text,
+            )
+
+        # Remove temporary local copy
+        os.remove(save_path)
+
+        return jsonify({
+            "success": True,
+            "file_id": file_id,
+            "filename": filename,
+            "is_image": ext in file_reader.IMAGE_EXTENSIONS,
+            "preview": extracted_text[:600]
+        })
+
     except Exception as e:
-        print(f"[upload] Could not save upload record to MySQL: {e}")
+        print(f"[upload] Upload failed: {e}")
 
-    preview = extracted_text[:600]
+        if "save_path" in locals() and os.path.exists(save_path):
+            os.remove(save_path)
 
-    return jsonify({
-        "success": True,
-        "filename": filename,
-        "is_image": ext in file_reader.IMAGE_EXTENSIONS,
-        "preview": preview,
-    })
+        return jsonify({
+            "success": False,
+            "error": "File upload failed."
+        }), 500
+
 
 
 # ---------------------------------

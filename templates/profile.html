@@ -212,9 +212,9 @@ button:hover { filter: brightness(1.1); }
         <div class="avatar-section">
 
             <div class="avatar" id="avatar-preview">
-                {% if user.get("profile_photo") %}
+                {% if profile_photo_url %}
                     <img
-                        src="{{ url_for('static', filename=user.profile_photo) }}"
+                        src="{{ profile_photo_url }}"
                         alt="Profile photo"
                     >
                 {% else %}

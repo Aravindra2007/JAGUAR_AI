@@ -81,6 +81,10 @@ def set_pending_attachment(context_text: str):
     with _lock:
         _pending_attachment = context_text
 
+def has_pending_attachment() -> bool:
+    with _lock:
+        return bool(_pending_attachment)
+
 
 def get_and_clear_pending_attachment():
     global _pending_attachment
