@@ -465,7 +465,34 @@ for entry in state.get_history():
         # one-liner instead of crashing.
         if isinstance(assistant_text, dict):
             envelope = assistant_text.get("envelope") or {}
-            st.write(f"⚠️ Confirmation requested: {envelope.get('prompt', 'approve or deny')}")
+            st.markdown("⚠️ **Confirm action**")
+            st.write(envelope.get("prompt", "Approve or deny this action."))
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ Approve", key=f"confirm_yes_{envelope.get('token', '')}"):
+                    try:
+                        result = router.process_with_confirmation(envelope.get("token", ""), "yes")
+                    except Exception as e:
+                        result = f"Sorry Sir, something went wrong running that action: {e}"
+                    state.update_pending_confirmation_history(envelope.get("token", ""), result)
+                    state.set_status("Awaiting confirmation" if isinstance(result, dict) else "Idle")
+                    state.set_text(
+                        f"[Awaiting confirmation] {(result.get('envelope') or {}).get('prompt', '')}"
+                        if isinstance(result, dict)
+                        else result
+                    )
+                    st.rerun()
+            with col_no:
+                if st.button("❌ Deny", key=f"confirm_no_{envelope.get('token', '')}"):
+                    result = router.process_with_confirmation(envelope.get("token", ""), "no")
+                    state.update_pending_confirmation_history(envelope.get("token", ""), result)
+                    state.set_status("Awaiting confirmation" if isinstance(result, dict) else "Idle")
+                    state.set_text(
+                        f"[Awaiting confirmation] {(result.get('envelope') or {}).get('prompt', '')}"
+                        if isinstance(result, dict)
+                        else result
+                    )
+                    st.rerun()
         else:
             st.write(assistant_text)
 
@@ -490,44 +517,14 @@ if prompt:
 
     typing_placeholder.empty()
 
-    # --- Phase 1: tool-use confirmation branch ---
+    # Keep pending plans in history so subsequent approval steps are also actionable.
     if isinstance(response, dict) and response.get("type") == "needs_confirmation":
         envelope = response.get("envelope") or {}
-        token = envelope.get("token", "")
-        prompt_text = envelope.get("prompt", "Confirm this action?")
-
         state.set_status("Awaiting confirmation")
-        state.set_text(f"[Awaiting confirmation] {prompt_text}")
-
-        with st.chat_message("assistant"):
-            st.markdown("⚠️ **Confirm action**")
-            st.markdown(f"_{prompt_text}_")
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button("✅ Approve", key=f"confirm_yes_{token}"):
-                    try:
-                        result = router.process_with_confirmation(token, "yes")
-                    except Exception as e:
-                        result = f"Sorry Sir, something went wrong running that action: {e}"
-                    state.set_status("Idle")
-                    state.set_text(result)
-                    state.add_history(text, result)
-                    with st.chat_message("assistant"):
-                        st.write(result)
-                    st.rerun()
-            with col_no:
-                if st.button("❌ Deny", key=f"confirm_no_{token}"):
-                    result = router.process_with_confirmation(token, "no")
-                    state.set_status("Idle")
-                    state.set_text(result)
-                    state.add_history(text, result)
-                    with st.chat_message("assistant"):
-                        st.write(result)
-                    st.rerun()
-        # Stop here so we don't render the envelope dict as if it were
-        # text. The Approve/Deny buttons handle the next turn.
+        state.set_text(f"[Awaiting confirmation] {envelope.get('prompt', '')}")
+        state.add_history(text, response)
+        st.rerun()
         st.stop()
-    # --- end confirmation branch ---
 
     state.set_status("Idle")
     state.set_text(response)

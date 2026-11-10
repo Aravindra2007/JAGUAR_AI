@@ -104,54 +104,47 @@ class VoiceListener(threading.Thread):
 
                         response = self.router.process(command)
 
-                        # --- Phase 1: tool-use confirmation ---
-                        # If the router returned a confirmation envelope,
-                        # speak the prompt, listen once for yes/no, then
-                        # resolve via router.process_with_confirmation.
+                        # A multi-step plan may need approval more than once.
                         if isinstance(response, dict) and response.get("type") == "needs_confirmation":
-                            envelope = response.get("envelope") or {}
-                            prompt = envelope.get("prompt", "Confirm this action?")
-                            token = envelope.get("token")
-
-                            state.set_status("Awaiting confirmation...")
-                            if not state.is_muted():
-                                speak(prompt + " Say yes or no.", language=state.get_language())
-
                             yes_tokens = {"yes", "yeah", "yep", "sure", "confirm", "do it", "ok", "okay"}
                             no_tokens = {"no", "nope", "cancel", "don't", "dont", "stop"}
-                            decision = None
-                            try:
-                                confirmation_audio = self.recognizer.listen(
-                                    source,
-                                    timeout=4,
-                                    phrase_time_limit=3,
-                                )
-                                confirmation_sr = languages.get_sr_code(state.get_language())
-                                confirmation_text = self.recognizer.recognize_google(
-                                    confirmation_audio, language=confirmation_sr
-                                ).lower()
-                                tokens = set(confirmation_text.split())
-                                if tokens & yes_tokens:
-                                    decision = "yes"
-                                elif tokens & no_tokens:
-                                    decision = "no"
-                            except (sr.WaitTimeoutError, sr.UnknownValueError, sr.RequestError):
-                                decision = None
-                            except Exception:
-                                decision = None
+                            while isinstance(response, dict) and response.get("type") == "needs_confirmation":
+                                envelope = response.get("envelope") or {}
+                                prompt = envelope.get("prompt", "Confirm this action?")
+                                token = envelope.get("token")
 
-                            try:
-                                if decision == "yes":
-                                    response = self.router.process_with_confirmation(token, "yes")
-                                elif decision == "no":
-                                    response = self.router.process_with_confirmation(token, "no")
-                                else:
-                                    # Default to denying if we can't parse
-                                    # the user's answer - safer than running
-                                    # an unconfirmed action.
-                                    response = "Cancelled."
-                            except Exception as e:
-                                response = f"Sorry Sir, something went wrong running that action: {e}"
+                                state.set_status("Awaiting confirmation...")
+                                if not state.is_muted():
+                                    speak(prompt + " Say yes or no.", language=state.get_language())
+
+                                decision = None
+                                try:
+                                    confirmation_audio = self.recognizer.listen(
+                                        source,
+                                        timeout=4,
+                                        phrase_time_limit=3,
+                                    )
+                                    confirmation_sr = languages.get_sr_code(state.get_language())
+                                    confirmation_text = self.recognizer.recognize_google(
+                                        confirmation_audio, language=confirmation_sr
+                                    ).lower()
+                                    tokens = set(confirmation_text.split())
+                                    if tokens & yes_tokens:
+                                        decision = "yes"
+                                    elif tokens & no_tokens:
+                                        decision = "no"
+                                except (sr.WaitTimeoutError, sr.UnknownValueError, sr.RequestError):
+                                    decision = None
+                                except Exception:
+                                    decision = None
+
+                                try:
+                                    response = self.router.process_with_confirmation(
+                                        token,
+                                        decision or "no",
+                                    )
+                                except Exception as e:
+                                    response = f"Sorry Sir, something went wrong running that action: {e}"
 
                             if not state.is_muted():
                                 speak(response, language=state.get_language())

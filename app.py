@@ -1,6 +1,4 @@
 import os
-from db import save_uploaded_file
-import uuid
 
 try:
     from dotenv import load_dotenv
@@ -38,8 +36,6 @@ except Exception as _e:  # pragma: no cover
 app = Flask(__name__)
 app.secret_key = os.getenv("JAGUAR_SECRET_KEY", "dev-key-change-this-in-production")
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_UPLOAD_EXTENSIONS = {
     ".txt", ".md", ".csv", ".log", ".json",
     ".pdf", ".docx",
@@ -108,6 +104,7 @@ def command():
 
     data = request.get_json()
     text = data.get("text", "").strip()
+    state.set_current_user(current_user.id, current_user.username)
 
     if text == "":
         return jsonify({
@@ -116,7 +113,7 @@ def command():
 
     state.set_status("Processing...")
 
-    response = router.process(text)
+    response = router.process(text, user_id=str(current_user.id))
 
     state.set_status("Idle")
     state.set_text(response if isinstance(response, str) else "Awaiting confirmation.")
@@ -281,37 +278,22 @@ def upload():
         }), 400
 
     try:
-        # Read file for text extraction
         upload_file.stream.seek(0)
-
-        # Extract text using a temporary local file
-        user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))
-        os.makedirs(user_dir, exist_ok=True)
-
-        unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
-        save_path = os.path.join(user_dir, unique_name)
-
-        upload_file.save(save_path)
-
-        extracted_text = file_reader.extract_text(save_path)
-        
+        content = upload_file.stream.read()
+        extracted_text = file_reader.extract_text_bytes(filename, content)
         attachment_context = file_reader.build_attachment_context(
             filename, extracted_text
         )
         state.set_pending_attachment(attachment_context)
 
-        # Upload the original file to Supabase and save metadata
-        with open(save_path, "rb") as file_data:
-            file_id = db.save_uploaded_file(
-                user_id=str(current_user.id),
-                filename=filename,
-                filepath=save_path,
-                filetype=ext.lstrip("."),
-                extracted_text=extracted_text,
-            )
-
-        # Remove temporary local copy
-        os.remove(save_path)
+        upload_file.stream.seek(0)
+        file_id = db.save_uploaded_file(
+            user_id=str(current_user.id),
+            filename=filename,
+            filepath=upload_file,
+            filetype=ext.lstrip("."),
+            extracted_text=extracted_text,
+        )
 
         return jsonify({
             "success": True,
@@ -323,9 +305,6 @@ def upload():
 
     except Exception as e:
         print(f"[upload] Upload failed: {e}")
-
-        if "save_path" in locals() and os.path.exists(save_path):
-            os.remove(save_path)
 
         return jsonify({
             "success": False,
@@ -394,6 +373,7 @@ def autonomous_run():
     try:
         job = run_autonomous_goal(
             goal=goal,
+            user_id=str(current_user.id),
             llm_provider=cfg.get("provider", "OpenAI"),
             llm_api_key=cfg.get("api_key", ""),
             llm_model=cfg.get("model", ""),
@@ -411,7 +391,7 @@ def autonomous_run():
 @app.route("/autonomous/<job_id>")
 @login_required
 def autonomous_status(job_id: str):
-    job = get_autonomous_job(job_id)
+    job = get_autonomous_job(job_id, user_id=str(current_user.id))
     if not job:
         return jsonify({"ok": False, "error": "Unknown job_id"}), 404
     return jsonify({"ok": True, "job": job.to_dict()})
@@ -422,7 +402,13 @@ def autonomous_status(job_id: str):
 def autonomous_list():
     return jsonify({
         "ok": True,
-        "jobs": [j.to_dict() for j in list_autonomous_jobs(limit=50)],
+        "jobs": [
+            j.to_dict()
+            for j in list_autonomous_jobs(
+                limit=50,
+                user_id=str(current_user.id),
+            )
+        ],
     })
 
 
@@ -441,9 +427,13 @@ def personality_route():
         for k, v in data.items():
             if v in (None, ""):
                 continue
-            jaguar_memory.update_preference(k, v)
+            jaguar_memory.update_preference(
+                k,
+                v,
+                user_id=str(current_user.id),
+            )
         # Reseat the LLM system prompt so the change is immediate.
-        prefs = jaguar_memory.get_preferences()
+        prefs = jaguar_memory.get_preferences(user_id=str(current_user.id))
         base = state.get_llm_config().get("system_prompt", "")
         new_system = jaguar_personality.build_system_prompt(base, preferences=prefs)
         state.set_llm_config(system_prompt=new_system)
@@ -451,7 +441,7 @@ def personality_route():
 
     return jsonify({
         "ok": True,
-        "preferences": jaguar_memory.get_preferences(),
+        "preferences": jaguar_memory.get_preferences(user_id=str(current_user.id)),
         "tones": jaguar_personality.available_tones(),
         "styles": jaguar_personality.available_styles(),
     })
@@ -474,6 +464,7 @@ def memory_recall():
         query,
         top_k=int(data.get("top_k", 5) or 5),
         kind=data.get("kind"),
+        user_id=str(current_user.id),
     )
     return jsonify({
         "ok": True,
@@ -490,8 +481,66 @@ def memory_results():
     kind = request.args.get("kind")
     return jsonify({
         "ok": True,
-        "results": jaguar_memory.list_results(kind=kind, limit=100),
+        "results": jaguar_memory.list_results(
+            kind=kind,
+            limit=100,
+            user_id=str(current_user.id),
+        ),
     })
+
+
+@app.route("/memory", methods=["GET"])
+@login_required
+def memory_list():
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Memory core unavailable."}), 503
+    entries = jaguar_memory.list_memories(
+        user_id=str(current_user.id),
+        kind=request.args.get("kind"),
+        limit=int(request.args.get("limit", 100)),
+    )
+    return jsonify({"ok": True, "entries": [entry.to_dict() for entry in entries]})
+
+
+@app.route("/memory", methods=["POST"])
+@login_required
+def memory_remember():
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Memory core unavailable."}), 503
+    data = request.get_json() or {}
+    if data.get("approved") is not True:
+        return jsonify({"ok": False, "error": "Explicit approval is required."}), 400
+    try:
+        memory_id = jaguar_memory.remember(
+            data.get("text", ""),
+            kind=data.get("kind", "project"),
+            metadata=data.get("metadata") or {},
+            importance=float(data.get("importance", 0.5)),
+            user_id=str(current_user.id),
+        )
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    return jsonify({"ok": True, "id": memory_id})
+
+
+@app.route("/memory/<memory_id>", methods=["PUT", "DELETE"])
+@login_required
+def memory_item(memory_id: str):
+    if not JAGUAR_AUTONOMOUS_AVAILABLE:
+        return jsonify({"ok": False, "error": "Memory core unavailable."}), 503
+    user_id = str(current_user.id)
+    if request.method == "DELETE":
+        changed = jaguar_memory.forget(memory_id, user_id=user_id)
+    else:
+        data = request.get_json() or {}
+        changed = jaguar_memory.update_memory(
+            memory_id,
+            data.get("text", ""),
+            user_id=user_id,
+        )
+    if not changed:
+        return jsonify({"ok": False, "error": "Memory not found."}), 404
+    return jsonify({"ok": True})
 
 
 # ---------------------------------
@@ -544,6 +593,7 @@ def stop():
 @app.route("/confirm", methods=["POST"])
 @login_required
 def confirm():
+    state.set_current_user(current_user.id, current_user.username)
     data = request.get_json() or {}
     token = data.get("token", "")
     decision = data.get("decision", "")
@@ -551,9 +601,17 @@ def confirm():
     if not token:
         return jsonify({"response": "Missing token."}), 400
 
-    response = router.process_with_confirmation(token, decision)
+    response = router.process_with_confirmation(
+        token,
+        decision,
+        user_id=str(current_user.id),
+    )
     state.add_history("[tool action]", response)
-    state.set_text(response)
+    if isinstance(response, dict) and response.get("type") == "needs_confirmation":
+        prompt = (response.get("envelope") or {}).get("prompt", "Awaiting confirmation.")
+        state.set_text(f"[Awaiting confirmation] {prompt}")
+    else:
+        state.set_text(response)
 
     return jsonify({"response": response})
 

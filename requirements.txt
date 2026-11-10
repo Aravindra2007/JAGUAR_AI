@@ -97,25 +97,6 @@ httpx                 # used by some test scripts
 
 
 # ----------------------------------------------------------------------------
-# VECTOR MEMORY — SEMANTIC RECALL
-# ----------------------------------------------------------------------------
-
-sentence-transformers   # embedder; falls back to hashed BoW if missing
-numpy                   # required by faiss
-
-
-# ----------------------------------------------------------------------------
-# VECTOR INDEX
-# Pick ONE of these for the vector index.
-# Both have graceful fallback to an in-memory cosine index if neither
-# is installed.
-# ----------------------------------------------------------------------------
-
-faiss-cpu               # local, fast, file-based
-# chromadb              # persistent client/server - uncomment if you prefer
-
-
-# ----------------------------------------------------------------------------
 # BROWSER AUTOMATION
 # ----------------------------------------------------------------------------
 

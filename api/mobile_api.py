@@ -33,8 +33,9 @@ import tempfile
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 # Reuse existing LLM router + new core modules.
@@ -47,6 +48,7 @@ if _ROOT not in sys.path:
 from llm_client import ask, LLMError  # noqa: E402
 import agents  # noqa: E402
 import state  # noqa: E402
+import db  # noqa: E402
 from jaguar_core import memory, personality, planner  # noqa: E402
 from jaguar_core.autonomous import (  # noqa: E402
     run_autonomous_goal, get_job, list_jobs,
@@ -55,6 +57,29 @@ from jaguar_core.autonomous import (  # noqa: E402
 
 APP_NAME = "Jaguar AI Mobile API"
 APP_VERSION = "1.0.0"
+_bearer_auth = HTTPBearer(auto_error=False)
+
+
+def _authenticated_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_auth),
+) -> Dict[str, Any]:
+    if credentials is None or credentials.scheme.casefold() != "bearer":
+        raise HTTPException(401, "A Firebase ID token is required.")
+    try:
+        claims = db.verify_firebase_id_token(credentials.credentials)
+    except db.DBError as error:
+        raise HTTPException(401, str(error)) from error
+
+    email = str(claims.get("email") or "").strip().lower()
+    if not email or claims.get("email_verified") is not True:
+        raise HTTPException(403, "A verified Firebase email is required.")
+    try:
+        user = db.get_user_by_email(email)
+    except Exception as error:
+        raise HTTPException(503, "Jaguar account lookup is unavailable.") from error
+    if user is None:
+        raise HTTPException(403, "No Jaguar account is linked to this Firebase user.")
+    return user
 
 
 # ---------------------------------------------------------------
@@ -73,7 +98,6 @@ class ChatRequest(BaseModel):
     text: str = Field(..., description="User's message.")
     config: Optional[LLMConfig] = None
     history: Optional[List[Dict[str, str]]] = None
-    user_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -111,6 +135,18 @@ class RecallRequest(BaseModel):
     query: str
     top_k: int = 5
     kind: Optional[str] = None
+
+
+class RememberRequest(BaseModel):
+    text: str
+    kind: str = "project"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    importance: float = 0.5
+    approved: bool = False
+
+
+class MemoryUpdateRequest(BaseModel):
+    text: str
 
 
 class RecallResponse(BaseModel):
@@ -180,7 +216,7 @@ def register_routes(app: FastAPI) -> None:
             "endpoints": [
                 "/health", "/chat", "/voice", "/task",
                 "/task/{job_id}", "/tasks",
-                "/memory/recall", "/preferences",
+                "/memory", "/memory/recall", "/preferences",
                 "/preferences/tone", "/tts",
             ],
         }
@@ -198,7 +234,10 @@ def register_routes(app: FastAPI) -> None:
     # -------------------------
 
     @app.post("/chat", response_model=ChatResponse)
-    def chat(req: ChatRequest) -> ChatResponse:
+    def chat(
+        req: ChatRequest,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> ChatResponse:
         text = (req.text or "").strip()
         if not text:
             raise HTTPException(400, "Empty text.")
@@ -208,8 +247,13 @@ def register_routes(app: FastAPI) -> None:
         system_prompt = personality.build_system_prompt(
             base_prompt="You are Jaguar, an autonomous voice/text AI assistant.",
             agent_specialization=agents.system_prompt_for(agent_key, ""),
+            preferences=memory.get_preferences(user_id=str(user["id"])),
         )
-        ctx = memory.recall_context_block(text, top_k=4)
+        ctx = memory.recall_context_block(
+            text,
+            top_k=4,
+            user_id=str(user["id"]),
+        )
         if ctx:
             system_prompt += f"\n\n{ctx}"
 
@@ -237,7 +281,12 @@ def register_routes(app: FastAPI) -> None:
             raise HTTPException(502, f"LLM error: {e}")
 
         reply_text = (reply or "").strip() or "I'm not sure how to respond to that."
-        memory.ingest_chat_turn(text, reply_text)
+        db.save_chat_message(
+            str(user["id"]),
+            text,
+            reply_text,
+            source="mobile",
+        )
 
         return ChatResponse(
             reply=reply_text,
@@ -254,6 +303,7 @@ def register_routes(app: FastAPI) -> None:
     async def voice(
         audio: UploadFile = File(...),
         config: str = Form("{}"),
+        user: Dict[str, Any] = Depends(_authenticated_user),
     ) -> VoiceResponse:
         import json as _json
         try:
@@ -261,22 +311,14 @@ def register_routes(app: FastAPI) -> None:
         except Exception:
             cfg = LLMConfig()
 
-        # Save the upload to a temp file because Whisper wants a path.
-        suffix = os.path.splitext(audio.filename or "")[1] or ".wav"
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix)
-        try:
-            data = await audio.read()
-            with os.fdopen(tmp_fd, "wb") as f:
-                f.write(data)
-            transcript = _transcribe(tmp_path)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+        data = await audio.read()
+        transcript = _transcribe(data)
 
         # Run the same /chat path on the transcript.
-        chat_resp = chat(ChatRequest(text=transcript, config=cfg))
+        chat_resp = chat(
+            ChatRequest(text=transcript, config=cfg),
+            user=user,
+        )
         return VoiceResponse(
             transcript=chat_resp.reply and transcript or transcript,
             reply=chat_resp.reply,
@@ -288,7 +330,10 @@ def register_routes(app: FastAPI) -> None:
     # -------------------------
 
     @app.post("/task", response_model=TaskResponse)
-    def task(req: TaskRequest) -> TaskResponse:
+    def task(
+        req: TaskRequest,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> TaskResponse:
         cfg = req.config or LLMConfig()
         job = run_autonomous_goal(
             goal=req.goal,
@@ -299,6 +344,7 @@ def register_routes(app: FastAPI) -> None:
             ollama_host=cfg.ollama_host,
             headless_browser=req.headless_browser,
             background=req.background,
+            user_id=str(user["id"]),
         )
         return TaskResponse(
             job_id=job.id, goal=job.goal, status=job.status,
@@ -308,8 +354,11 @@ def register_routes(app: FastAPI) -> None:
         )
 
     @app.get("/task/{job_id}", response_model=TaskResponse)
-    def task_status(job_id: str) -> TaskResponse:
-        job = get_job(job_id)
+    def task_status(
+        job_id: str,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> TaskResponse:
+        job = get_job(job_id, user_id=str(user["id"]))
         if not job:
             raise HTTPException(404, "Unknown job_id.")
         return TaskResponse(
@@ -320,9 +369,15 @@ def register_routes(app: FastAPI) -> None:
         )
 
     @app.get("/tasks")
-    def tasks_list(limit: int = 50) -> Dict[str, Any]:
+    def tasks_list(
+        limit: int = 50,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
         return {
-            "jobs": [j.to_dict() for j in list_jobs(limit=limit)],
+            "jobs": [
+                j.to_dict()
+                for j in list_jobs(limit=limit, user_id=str(user["id"]))
+            ],
         }
 
     # -------------------------
@@ -330,42 +385,104 @@ def register_routes(app: FastAPI) -> None:
     # -------------------------
 
     @app.post("/memory/recall", response_model=RecallResponse)
-    def recall(req: RecallRequest) -> RecallResponse:
-        entries = memory.recall(req.query, top_k=req.top_k, kind=req.kind)
+    def recall(
+        req: RecallRequest,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> RecallResponse:
+        entries = memory.recall(
+            req.query,
+            top_k=req.top_k,
+            kind=req.kind,
+            user_id=str(user["id"]),
+        )
         return RecallResponse(
             query=req.query,
             entries=[e.to_dict() for e in entries],
         )
 
     @app.post("/memory/remember")
-    def remember(payload: Dict[str, Any]) -> Dict[str, Any]:
-        text = str(payload.get("text", "")).strip()
-        kind = str(payload.get("kind", "chat"))
-        meta = payload.get("metadata") or {}
-        if not text:
+    def remember(
+        payload: RememberRequest,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
+        if not payload.approved:
+            raise HTTPException(400, "Explicit approval is required.")
+        if not payload.text.strip():
             raise HTTPException(400, "Empty text.")
-        entry_id = memory.remember(text, kind=kind, metadata=meta)
+        try:
+            entry_id = memory.remember(
+                payload.text,
+                kind=payload.kind,
+                metadata=payload.metadata,
+                importance=payload.importance,
+                user_id=str(user["id"]),
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
         return {"id": entry_id, "ok": True}
+
+    @app.get("/memory")
+    def memory_list(
+        kind: Optional[str] = None,
+        limit: int = 100,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
+        try:
+            entries = memory.list_memories(
+                user_id=str(user["id"]),
+                kind=kind,
+                limit=limit,
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        return {"entries": [entry.to_dict() for entry in entries]}
+
+    @app.put("/memory/{entry_id}")
+    def memory_update(
+        entry_id: str,
+        payload: MemoryUpdateRequest,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
+        try:
+            updated = memory.update_memory(
+                entry_id,
+                payload.text,
+                user_id=str(user["id"]),
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        if not updated:
+            raise HTTPException(404, "Memory not found.")
+        return {"ok": True}
+
+    @app.delete("/memory/{entry_id}")
+    def memory_delete(
+        entry_id: str,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
+        if not memory.forget(entry_id, user_id=str(user["id"])):
+            raise HTTPException(404, "Memory not found.")
+        return {"ok": True}
 
     # -------------------------
     # Preferences
     # -------------------------
 
     @app.get("/preferences")
-    def prefs_get() -> Dict[str, Any]:
-        return memory.get_preferences()
+    def prefs_get(
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
+        return memory.get_preferences(user_id=str(user["id"]))
 
     @app.post("/preferences")
-    def prefs_update(update: PreferenceUpdate) -> Dict[str, Any]:
-        prefs = memory.get_preferences()
+    def prefs_update(
+        update: PreferenceUpdate,
+        user: Dict[str, Any] = Depends(_authenticated_user),
+    ) -> Dict[str, Any]:
+        prefs = memory.get_preferences(user_id=str(user["id"]))
         for k, v in update.dict(exclude_none=True).items():
-            prefs[k] = v
-            memory.remember(f"User preference: {k} = {v}",
-                            kind="preference", metadata={"preference_key": k})
-        # persist via update_preference to keep disk in sync
-        for k, v in update.dict(exclude_none=True).items():
-            memory.update_preference(k, v)
-        return memory.get_preferences()
+            prefs = memory.update_preference(k, v, user_id=str(user["id"]))
+        return prefs
 
     # -------------------------
     # TTS (returns base64 mp3)
@@ -388,22 +505,42 @@ def register_routes(app: FastAPI) -> None:
 # ---------------------------------------------------------------
 
 def _memory_backend_name() -> str:
-    """Cheap probe so /health can report which vector backend is live."""
-    try:
-        from jaguar_core.memory import _index
-        return _index().backend
-    except Exception:
-        return "unknown"
+    """Report the configured persistent-memory provider without probing it."""
+    return (
+        "supabase"
+        if os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SECRET_KEY")
+        else "unavailable"
+    )
 
 
-def _transcribe(audio_path: str) -> str:
+def _transcribe(audio_bytes: bytes) -> str:
     """Best-effort Whisper transcription. Falls back to a no-op stub
     with a clear message so the endpoint stays usable when Whisper
-    isn't installed."""
+    or ffmpeg isn't installed. Audio is decoded in memory."""
     try:
+        import numpy as np
+        import subprocess
         import whisper  # type: ignore
+
+        decoded = subprocess.run(
+            [
+                "ffmpeg", "-nostdin", "-i", "pipe:0",
+                "-f", "s16le", "-ac", "1",
+                "-acodec", "pcm_s16le", "-ar", "16000", "pipe:1",
+            ],
+            input=audio_bytes,
+            capture_output=True,
+            check=True,
+        )
+        samples = (
+            np.frombuffer(decoded.stdout, dtype=np.int16)
+            .astype(np.float32)
+            / 32768.0
+        )
+        if samples.size == 0:
+            return "(transcription unavailable: audio stream was empty)"
         model = whisper.load_model("base")
-        result = model.transcribe(audio_path, fp16=False)
+        result = model.transcribe(samples, fp16=False)
         return (result.get("text") or "").strip()
     except Exception as e:
         return f"(transcription unavailable: {e})"

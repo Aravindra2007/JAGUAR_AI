@@ -10,6 +10,7 @@
 
 import os
 import threading
+import time
 import overlay # New overlay integration
 
 _lock = threading.Lock()
@@ -121,7 +122,6 @@ _llm_config = {
     # --- Optional local tool-use ---
     "tools_enabled": True,
     "workspace_dir": os.path.expanduser("~"),
-    "reminders_path": "reminders.json",
 }
 
 # Pending confirmation envelopes keyed by uuid token. Both UI surfaces
@@ -166,6 +166,21 @@ def add_history(user_text, assistant_text):
         })
 
 
+def update_pending_confirmation_history(token, assistant_text):
+    with _lock:
+        for entry in reversed(_history):
+            assistant = entry.get("assistant")
+            envelope = assistant.get("envelope", {}) if isinstance(assistant, dict) else {}
+            if (
+                isinstance(assistant, dict)
+                and assistant.get("type") == "needs_confirmation"
+                and envelope.get("token") == token
+            ):
+                entry["assistant"] = assistant_text
+                return True
+        return False
+
+
 def clear_history():
     with _lock:
         _history.clear()
@@ -195,7 +210,7 @@ def is_muted():
 def set_llm_config(**kwargs):
     """Update one or more LLM settings (provider, api_key, model,
     temperature, system_prompt, ollama_host, enabled, tools_enabled,
-    workspace_dir, reminders_path)."""
+    workspace_dir)."""
     with _lock:
         _llm_config.update(kwargs)
 
@@ -221,15 +236,44 @@ def get_listener():
 
 def push_pending_confirmation(token, envelope):
     with _lock:
+        now = time.time()
+        expired = [
+            pending_token
+            for pending_token, pending in _pending_confirmations.items()
+            if pending.get("expires_at", float("inf")) <= now
+        ]
+        for pending_token in expired:
+            _pending_confirmations.pop(pending_token, None)
         _pending_confirmations[token] = envelope
 
 
 def pop_pending_confirmation(token):
+    pending, _expired = take_pending_confirmation(token)
+    return pending
+
+
+def take_pending_confirmation(token, user_id=None):
     with _lock:
-        return _pending_confirmations.pop(token, None)
+        envelope = _pending_confirmations.get(token)
+        if (
+            envelope is not None
+            and user_id is not None
+            and str(envelope.get("user_id") or "") != str(user_id or "")
+        ):
+            return None, False
+        envelope = _pending_confirmations.pop(token, None)
+        if envelope is None:
+            return None, False
+        expired = envelope.get("expires_at", 0) <= time.time()
+        return (None, True) if expired else (envelope, False)
 
 
 def peek_pending_confirmation(token):
     with _lock:
         envelope = _pending_confirmations.get(token)
-        return dict(envelope) if envelope is not None else None
+        if envelope is None:
+            return None
+        if envelope.get("expires_at", 0) <= time.time():
+            _pending_confirmations.pop(token, None)
+            return None
+        return dict(envelope)

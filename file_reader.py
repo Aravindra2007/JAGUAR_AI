@@ -20,6 +20,7 @@ gets shown to the user and (optionally) handed to the LLM.
 from __future__ import annotations
 
 import os
+from io import BytesIO
 
 MAX_EXTRACT_CHARS = 12000
 
@@ -41,14 +42,14 @@ def _extract_txt(path: str) -> str:
         return fh.read(MAX_EXTRACT_CHARS)
 
 
-def _extract_pdf(path: str) -> str:
+def _extract_pdf(source) -> str:
     try:
         from PyPDF2 import PdfReader
     except ImportError:
         return "(PDF reading requires PyPDF2 - run: pip install PyPDF2)"
 
     try:
-        reader = PdfReader(path)
+        reader = PdfReader(source)
         pages = []
         for page in reader.pages:
             pages.append(page.extract_text() or "")
@@ -57,20 +58,20 @@ def _extract_pdf(path: str) -> str:
         return f"(Could not read this PDF: {e})"
 
 
-def _extract_docx(path: str) -> str:
+def _extract_docx(source) -> str:
     try:
         import docx
     except ImportError:
         return "(Word reading requires python-docx - run: pip install python-docx)"
 
     try:
-        document = docx.Document(path)
+        document = docx.Document(source)
         return "\n".join(p.text for p in document.paragraphs)
     except Exception as e:
         return f"(Could not read this Word document: {e})"
 
 
-def _extract_image(path: str) -> str:
+def _extract_image(source) -> str:
     try:
         import pytesseract
         from PIL import Image
@@ -84,7 +85,7 @@ def _extract_image(path: str) -> str:
         )
 
     try:
-        text = pytesseract.image_to_string(Image.open(path))
+        text = pytesseract.image_to_string(Image.open(source))
         text = text.strip()
         if not text:
             return "(No readable text found in this image via OCR.)"
@@ -111,6 +112,25 @@ def extract_text(path: str) -> str:
     else:
         raw = f"(Unsupported file type '{ext}'. Supported: text, PDF, DOCX, and common image formats.)"
 
+    return _truncate(raw)
+
+
+def extract_text_bytes(filename: str, content: bytes) -> str:
+    """Extract upload text directly from memory without writing a local copy."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in TEXT_EXTENSIONS:
+        raw = content.decode("utf-8", errors="replace")
+    elif ext in PDF_EXTENSIONS:
+        raw = _extract_pdf(BytesIO(content))
+    elif ext in DOCX_EXTENSIONS:
+        raw = _extract_docx(BytesIO(content))
+    elif ext in IMAGE_EXTENSIONS:
+        raw = _extract_image(BytesIO(content))
+    else:
+        raw = (
+            f"(Unsupported file type '{ext}'. Supported: text, PDF, DOCX, "
+            "and common image formats.)"
+        )
     return _truncate(raw)
 
 

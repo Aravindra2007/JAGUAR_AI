@@ -151,9 +151,11 @@ Whether you prefer **cloud-based AI (OpenAI, Claude, Gemini)** or **privacy-firs
     ↓
   🔀 Command Router (Keyword + NLP)
     ↓
-  🧠 LLM Reasoning & Tool Planning
+  🧠 LLM Reasoning & Structured Planning
     ↓
-  🛠️ Tool Executor (Planned Actions)
+  🧩 Dependency-Aware Plan Executor
+    ↓
+  🛠️ Tool Executor (Validated Actions)
     ↓
   ⏳ User Confirmation Envelope
     ↓
@@ -196,31 +198,65 @@ Whether you prefer **cloud-based AI (OpenAI, Claude, Gemini)** or **privacy-firs
 - Captures output and errors
 - Maintains audit trail
 
-#### 6. **Confirmation System** (`confirmations.py`)
+#### 6. **Task Planner** (`planner.py`, `plan_executor.py`, `task_state.py`)
+- Uses the configured LLM provider to produce a structured JSON plan
+- Validates tool arguments, dependencies, cycles, and a 12-step limit
+- Runs ready steps, blocks dependents after failures, and continues independent steps
+- Pauses and resumes plans across per-action confirmation prompts
+- Preserves task IDs, completed steps, and observations while awaiting approval
+- Reviews execution results and can request one bounded follow-up plan
+
+#### 7. **Observation Engine** (`observer.py`)
+- Independently checks supported file, folder, and reminder outcomes
+- Reports unsupported or unverifiable outcomes without claiming success
+- Classifies failures to prevent unsafe retries and permission bypasses
+
+#### 8. **Cloud Memory and Persistence**
+- Supabase stores user-scoped memories, preferences, and task outcomes
+- Firebase/Firestore stores accounts, chat history, uploaded-file metadata, and reminders
+- Memory is retrieved per signed-in user and is not extracted from every chat automatically
+- Memory list, edit, delete, and explicitly approved save operations are available through the authenticated APIs
+- Browser automation uses an ephemeral profile; uploaded files are processed temporarily and retained in cloud storage
+
+When local tools are enabled, actionable requests are planned through this
+provider-independent path. File and folder operations stay inside the configured
+workspace; creating files, creating folders, and opening folders require approval.
+The initial and follow-up plans share a 12-step task limit. Pending approval
+tokens expire after five minutes. Pending task continuation is kept in memory;
+verification is limited to the checks supported by the observation engine.
+
+Supabase setup requires applying
+[`202611110001_cloud_memory.sql`](./supabase/migrations/202611110001_cloud_memory.sql)
+to the project database and configuring `SUPABASE_URL` and
+`SUPABASE_SECRET_KEY` server-side. The mobile API requires a verified Firebase
+ID token in the `Authorization: Bearer <token>` header for account data routes;
+the token email must match an existing Jaguar account.
+
+#### 9. **Confirmation System** (`confirmations.py`)
 - Prompts user for approval on risky operations
 - Voice-based yes/no confirmation
 - Visual feedback via overlay
 - Timeout handling for safety
 
-#### 7. **Text-to-Speech** (`speaker.py`)
+#### 10. **Text-to-Speech** (`speaker.py`)
 - Converts text responses to speech
 - Supports multiple TTS engines
 - Implements audio streaming
 - Thread-safe audio output
 
-#### 8. **Reminder Manager** (`reminder_manager.py`)
+#### 11. **Reminder Manager** (`reminder_manager.py`)
 - Background task scheduler
 - Proactive alert generation
 - Time-based trigger evaluation
 - Persistent state across sessions
 
-#### 9. **Desktop Overlay** (`overlay.py`, `control_gui.py`)
+#### 12. **Desktop Overlay** (`overlay.py`, `control_gui.py`)
 - Real-time status visualization
 - State indicators (Idle, Listening, Processing)
 - Quick control buttons
 - Always-on-top window management
 
-#### 10. **State Manager** (`state.py`, `db.py`)
+#### 13. **State Manager** (`state.py`, `db.py`)
 - Maintains conversation history
 - Stores user preferences
 - Manages session data
@@ -422,6 +458,10 @@ JAGUAR_AI/
 ├── speaker.py               # Text-to-speech
 ├── router.py                # Command routing
 ├── tool_executor.py         # Tool execution engine
+├── planner.py               # Provider-independent JSON plan generation
+├── plan_executor.py         # Dependency validation and plan execution
+├── task_state.py            # Pending plan continuation state
+├── observer.py              # Outcome verification and failure classification
 ├── confirmations.py         # User confirmation logic
 ├── reminder_manager.py      # Background reminders
 ├── overlay.py               # Desktop overlay UI

@@ -22,6 +22,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+import state
 from .planner import make_plan, Plan
 from .executor import PlanExecutor, ExecutionReport, StepReport
 from . import memory
@@ -40,6 +41,7 @@ _JOBS_LOCK = threading.Lock()
 class AutonomousJob:
     id: str
     goal: str
+    user_id: str = ""
     status: str = "pending"          # pending | running | done | error
     started_at: float = 0.0
     finished_at: float = 0.0
@@ -66,22 +68,32 @@ class AutonomousJob:
         }
 
 
-def _new_job(goal: str) -> AutonomousJob:
+def _new_job(goal: str, user_id: str) -> AutonomousJob:
     job_id = f"job_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
-    job = AutonomousJob(id=job_id, goal=goal)
+    job = AutonomousJob(id=job_id, goal=goal, user_id=user_id)
     with _JOBS_LOCK:
         _ACTIVE_JOBS[job_id] = job
     return job
 
 
-def get_job(job_id: str) -> Optional[AutonomousJob]:
+def get_job(job_id: str, *, user_id: Optional[str] = None) -> Optional[AutonomousJob]:
+    owner = str(user_id or state.get_current_user_id() or "")
     with _JOBS_LOCK:
-        return _ACTIVE_JOBS.get(job_id)
+        job = _ACTIVE_JOBS.get(job_id)
+        return job if job and owner and job.user_id == owner else None
 
 
-def list_jobs(limit: int = 50) -> List[AutonomousJob]:
+def list_jobs(
+    limit: int = 50,
+    *,
+    user_id: Optional[str] = None,
+) -> List[AutonomousJob]:
+    owner = str(user_id or state.get_current_user_id() or "")
+    if not owner:
+        return []
     with _JOBS_LOCK:
-        return sorted(_ACTIVE_JOBS.values(), key=lambda j: j.started_at, reverse=True)[:limit]
+        owned_jobs = (job for job in _ACTIVE_JOBS.values() if job.user_id == owner)
+        return sorted(owned_jobs, key=lambda j: j.started_at, reverse=True)[:limit]
 
 
 def prune_old_jobs(keep_last: int = 50):
@@ -98,6 +110,7 @@ def prune_old_jobs(keep_last: int = 50):
 def run_autonomous_goal(
     goal: str,
     *,
+    user_id: Optional[str] = None,
     llm_provider: str = "OpenAI",
     llm_api_key: str = "",
     llm_model: str = "",
@@ -118,11 +131,14 @@ def run_autonomous_goal(
     goal = (goal or "").strip()
     if not goal:
         raise ValueError("Empty goal")
+    owner = str(user_id or state.get_current_user_id() or "")
+    if not owner:
+        raise ValueError("An authenticated user is required for autonomous tasks.")
 
     # Recall anything we've done before that looks similar - the
     # context block is forwarded to the planner so "do like last
     # time" works on a fresh goal.
-    ctx = memory.recall_context_block(goal, top_k=4)
+    ctx = memory.recall_context_block(goal, top_k=4, user_id=owner)
 
     plan = make_plan(
         goal,
@@ -133,7 +149,7 @@ def run_autonomous_goal(
         ollama_host=ollama_host,
         memory_context=ctx or None,
     )
-    job = _new_job(goal)
+    job = _new_job(goal, owner)
     job.plan = plan
     job.started_at = time.time()
 
@@ -146,6 +162,7 @@ def run_autonomous_goal(
             llm_model=llm_model,
             llm_temperature=llm_temperature,
             ollama_host=ollama_host,
+            user_id=owner,
         )
         try:
             total = max(1, len(plan.steps))
@@ -171,6 +188,7 @@ def run_autonomous_goal(
                 title=goal,
                 detail=report.summary,
                 status=job.status,
+                user_id=owner,
             )
         except Exception as e:
             job.status = "error"

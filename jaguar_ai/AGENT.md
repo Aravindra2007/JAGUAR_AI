@@ -16,15 +16,19 @@ the new capabilities are additive and opt-in.
 | Capability | Where it lives | What it does |
 |---|---|---|
 | **Task planner** | `jaguar_core/planner.py` | Decomposes free-form goals into an ordered list of steps. Uses the configured LLM, with a keyword-based fallback. |
-| **Long-term vector memory** | `jaguar_core/memory.py` | Short-term chat window plus persistent semantic memory (FAISS → Chroma → in-memory). Stores user preferences, every chat turn, and every task result. Powers "do like last time". |
+| **Cloud memory** | `jaguar_core/memory.py` | User-scoped memories, preferences, and task outcomes in Supabase. Memory saves are explicit; chat history is stored separately in Firestore. |
 | **Personality engine** | `jaguar_core/personality.py` | Composes a system prompt from user tone / style / language preferences. Layered on top of the existing specialist agents. |
 | **Browser automation** | `jaguar_core/automation/browser.py` | Playwright wrapper: open URLs, search, fill forms, click, screenshot, with `webbrowser` fallback so the system still works without Playwright. |
 | **System automation** | `jaguar_core/automation/system.py` | PyAutoGUI wrapper: type, click, hotkey, clipboard, app launching. |
 | **Plan executor** | `jaguar_core/executor.py` | Walks a plan step-by-step, dispatches each action to the right automation backend, collects structured results. |
 | **Autonomous mode** | `jaguar_core/autonomous.py` | Given a goal ("apply to 10 internships"), plans, executes, stores results, returns a summary. Runs sync or in the background with a pollable job id. |
-| **Mobile-ready backend** | `api/mobile_api.py` | FastAPI app with `/chat`, `/voice`, `/task`, `/task/{id}`, `/tasks`, `/memory/recall`, `/preferences`, `/tts`, `/health`. |
+| **Mobile-ready backend** | `api/mobile_api.py` | FastAPI app with Firebase ID-token authentication for account data, plus chat, voice, task, memory, preference, TTS, and health endpoints. |
 
-The new endpoints are also exposed inside the existing Flask GUI at `/autonomous`, `/autonomous/<job_id>`, `/personality`, `/memory/recall`, `/memory/results`, and `/health`.
+The new endpoints are also exposed inside the existing Flask GUI at `/autonomous`, `/autonomous/<job_id>`, `/personality`, `/memory`, `/memory/recall`, `/memory/results`, and `/health`.
+
+Apply `supabase/migrations/202611110001_cloud_memory.sql` before using memory
+or preferences. Firebase ID tokens for mobile requests must have a verified
+email matching an existing Jaguar account.
 
 ---
 
@@ -48,6 +52,7 @@ For a one-shot autonomous goal (e.g. apply to internships):
 
 ```bash
 curl -X POST http://127.0.0.1:8000/task \
+  -H 'Authorization: Bearer <FIREBASE_ID_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"goal": "Apply to 10 machine learning internships", "background": false}'
 ```

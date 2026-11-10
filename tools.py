@@ -1,5 +1,5 @@
 """
-Jaguar AI — Phase 1 tool catalog.
+Jaguar AI tool catalog and guarded action implementations.
 
 Each tool wrapper takes its declared input and returns a `ToolOutcome`
 namedtuple with:
@@ -13,16 +13,15 @@ the action and (for mutating ones) return `mutating=True` so the
 executor will swap in a confirmation envelope. The actual side effect
 runs in ToolExecutor.execute_confirmed only after the user approves.
 
-This split keeps the model loop in claude_tool_agent.py simple: it
-just calls executor.execute(name, input) and gets back either a
-finished result or an envelope. No tools here should ever call
+This split keeps both the plan executor and model tool loops simple:
+they call executor.execute(name, input) and receive either a result or
+a confirmation envelope. No tools here should ever call
 subprocess / os.system / webbrowser / pyautogui directly — those
 happen only inside execute_confirmed.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import time
@@ -36,7 +35,11 @@ from typing import Any, Dict, List, Optional
 # Outcome + constants
 # ---------------------------------
 
-ToolOutcome = namedtuple("ToolOutcome", "text mutating confirmation_prompt")
+ToolOutcome = namedtuple(
+    "ToolOutcome",
+    "text mutating confirmation_prompt success",
+    defaults=(True,),
+)
 
 
 SHELL_ALLOWLIST = {
@@ -100,12 +103,12 @@ def _resolve_under_workspace(workspace_dir: str, path: str) -> str:
 
     Raises ValueError if the resolved path escapes the workspace.
     """
-    workspace_abs = os.path.abspath(workspace_dir)
+    workspace_abs = os.path.realpath(os.path.abspath(workspace_dir))
 
     if os.path.isabs(path):
-        candidate = os.path.abspath(path)
+        candidate = os.path.realpath(os.path.abspath(path))
     else:
-        candidate = os.path.abspath(os.path.join(workspace_abs, path))
+        candidate = os.path.realpath(os.path.abspath(os.path.join(workspace_abs, path)))
 
     try:
         common = os.path.commonpath([candidate, workspace_abs])
@@ -154,6 +157,7 @@ def open_application(name: str, workspace_dir: str = "") -> ToolOutcome:
             text=f"I don't know how to open '{name}'. Try one of: {', '.join(sorted(APP_ALIASES))}.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
     return ToolOutcome(
         text=f"Will launch {APP_ALIASES[key]}.",
@@ -178,6 +182,7 @@ def open_website(url_or_alias: str, workspace_dir: str = "") -> ToolOutcome:
         ),
         mutating=False,
         confirmation_prompt=None,
+        success=False,
     )
 
 
@@ -188,24 +193,29 @@ def list_directory(path: str, workspace_dir: str) -> ToolOutcome:
             text="No workspace folder is configured.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
     try:
         abs_path = _resolve_under_workspace(workspace_dir, path or ".")
     except ValueError as e:
-        return ToolOutcome(text=str(e), mutating=False, confirmation_prompt=None)
+        return ToolOutcome(text=str(e), mutating=False, confirmation_prompt=None, success=False)
 
     if not os.path.isdir(abs_path):
         return ToolOutcome(
             text=f"{abs_path} is not a directory.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
 
-    return ToolOutcome(
-        text=_format_dir_listing(workspace_dir, abs_path),
-        mutating=False,
-        confirmation_prompt=None,
-    )
+    try:
+        return ToolOutcome(
+            text=_format_dir_listing(workspace_dir, abs_path),
+            mutating=False,
+            confirmation_prompt=None,
+        )
+    except OSError as e:
+        return ToolOutcome(text=f"Could not list directory: {e}", mutating=False, confirmation_prompt=None, success=False)
 
 
 def read_file(path: str, workspace_dir: str) -> ToolOutcome:
@@ -215,21 +225,26 @@ def read_file(path: str, workspace_dir: str) -> ToolOutcome:
             text="No workspace folder is configured.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
     try:
         abs_path = _resolve_under_workspace(workspace_dir, path)
     except ValueError as e:
-        return ToolOutcome(text=str(e), mutating=False, confirmation_prompt=None)
+        return ToolOutcome(text=str(e), mutating=False, confirmation_prompt=None, success=False)
 
     if not os.path.isfile(abs_path):
         return ToolOutcome(
             text=f"{abs_path} is not a file.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
 
-    with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
-        content = fh.read(WORKSPACE_MAX_READ_CHARS)
+    try:
+        with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+            content = fh.read(WORKSPACE_MAX_READ_CHARS)
+    except OSError as e:
+        return ToolOutcome(text=f"Could not read file: {e}", mutating=False, confirmation_prompt=None, success=False)
 
     if len(content) == WORKSPACE_MAX_READ_CHARS:
         content += "\n\n[...truncated]"
@@ -244,11 +259,28 @@ def write_file(path: str, content: str, workspace_dir: str) -> ToolOutcome:
             text="No workspace folder is configured.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
     try:
         abs_path = _resolve_under_workspace(workspace_dir, path)
     except ValueError as e:
-        return ToolOutcome(text=str(e), mutating=False, confirmation_prompt=None)
+        return ToolOutcome(text=str(e), mutating=False, confirmation_prompt=None, success=False)
+
+    if os.path.lexists(abs_path):
+        return ToolOutcome(
+            text=f"{abs_path} already exists. Choose a different path; existing files are not overwritten.",
+            mutating=False,
+            confirmation_prompt=None,
+            success=False,
+        )
+    parent = os.path.dirname(abs_path)
+    if not os.path.isdir(parent):
+        return ToolOutcome(
+            text=f"Parent directory does not exist: {parent}",
+            mutating=False,
+            confirmation_prompt=None,
+            success=False,
+        )
 
     return ToolOutcome(
         text=f"Will write {len(content or '')} characters to {abs_path}.",
@@ -257,15 +289,56 @@ def write_file(path: str, content: str, workspace_dir: str) -> ToolOutcome:
     )
 
 
+def create_folder(path: str, workspace_dir: str) -> ToolOutcome:
+    if not workspace_dir:
+        return ToolOutcome("No workspace folder is configured.", False, None, False)
+    try:
+        abs_path = _resolve_under_workspace(workspace_dir, path)
+    except ValueError as e:
+        return ToolOutcome(str(e), False, None, False)
+    if os.path.isdir(abs_path):
+        return ToolOutcome(
+            f"Folder already exists: {abs_path}.",
+            False,
+            None,
+        )
+    if os.path.lexists(abs_path):
+        return ToolOutcome(f"{abs_path} already exists.", False, None, False)
+    parent = os.path.dirname(abs_path)
+    if not os.path.isdir(parent):
+        return ToolOutcome(f"Parent directory does not exist: {parent}", False, None, False)
+    return ToolOutcome(
+        f"Will create folder {abs_path}.",
+        True,
+        f"Create folder {abs_path}?",
+    )
+
+
+def open_folder(path: str, workspace_dir: str) -> ToolOutcome:
+    if not workspace_dir:
+        return ToolOutcome("No workspace folder is configured.", False, None, False)
+    try:
+        abs_path = _resolve_under_workspace(workspace_dir, path)
+    except ValueError as e:
+        return ToolOutcome(str(e), False, None, False)
+    if not os.path.isdir(abs_path):
+        return ToolOutcome(f"{abs_path} is not a directory.", False, None, False)
+    return ToolOutcome(
+        f"Will open folder {abs_path}.",
+        True,
+        f"Open folder {abs_path}?",
+    )
+
+
 def set_reminder(message: str, fire_at_iso: str, workspace_dir: str = "") -> ToolOutcome:
-    """Mutating: append a reminder to reminders.json. Phase 1 only writes
-    the file — actually firing the reminder is Phase 2."""
+    """Mutating: schedule a reminder after user approval."""
     message = (message or "").strip()
     if not message:
         return ToolOutcome(
             text="Reminder message cannot be empty.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
     try:
         fire_at = datetime.fromisoformat(fire_at_iso)
@@ -274,6 +347,7 @@ def set_reminder(message: str, fire_at_iso: str, workspace_dir: str = "") -> Too
             text=f"'{fire_at_iso}' is not a valid ISO timestamp.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
 
     seconds_until = (fire_at - datetime.now()).total_seconds()
@@ -298,6 +372,7 @@ def run_shell_command(command: str, workspace_dir: str = "") -> ToolOutcome:
             text="Empty shell command.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
 
     if not _SAFE_SHELL_RX.match(command):
@@ -305,6 +380,7 @@ def run_shell_command(command: str, workspace_dir: str = "") -> ToolOutcome:
             text="command not in allowlist, please run it manually.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
 
     head = command.split(maxsplit=1)[0].lower()
@@ -313,6 +389,7 @@ def run_shell_command(command: str, workspace_dir: str = "") -> ToolOutcome:
             text="command not in allowlist, please run it manually.",
             mutating=False,
             confirmation_prompt=None,
+            success=False,
         )
 
     return ToolOutcome(
@@ -410,10 +487,47 @@ TOOLS: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "create_folder",
+        "description": (
+            "Ensure one directory exists inside the configured workspace. "
+            "An existing directory is reported as already satisfied; an existing "
+            "non-directory path is refused. Its parent must already exist. "
+            "Creating the directory requires user confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "New folder path relative to the workspace.",
+                }
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "open_folder",
+        "description": (
+            "Open an existing directory inside the configured workspace "
+            "in Windows File Explorer. Requires user confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Directory path relative to the workspace.",
+                }
+            },
+            "required": ["path"],
+        },
+    },
+    {
         "name": "write_file",
         "description": (
             "Write text content to a file under the workspace. Refuses paths "
-            "outside the workspace. Requires user confirmation before writing."
+            "outside the workspace and refuses to overwrite an existing file. "
+            "Requires user confirmation before writing."
         ),
         "input_schema": {
             "type": "object",
@@ -501,6 +615,8 @@ def _invoke(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str) -> T
         "open_website":      lambda i: open_website(i.get("url_or_alias", ""), workspace_dir),
         "list_directory":    lambda i: list_directory(i.get("path", "."), workspace_dir),
         "read_file":         lambda i: read_file(i.get("path", ""), workspace_dir),
+        "create_folder":    lambda i: create_folder(i.get("path", ""), workspace_dir),
+        "open_folder":      lambda i: open_folder(i.get("path", ""), workspace_dir),
         "write_file":        lambda i: write_file(i.get("path", ""), i.get("content", ""), workspace_dir),
         "set_reminder":      lambda i: set_reminder(i.get("message", ""), i.get("fire_at_iso", ""), workspace_dir),
         "run_shell_command": lambda i: run_shell_command(i.get("command", ""), workspace_dir),
@@ -520,30 +636,60 @@ def _invoke(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str) -> T
 # Side-effect runners (called only after user confirms)
 # ---------------------------------
 
-def run_confirmed(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str,
-                   reminders_path: str = "reminders.json") -> str:
+def run_confirmed(
+    tool_name: str,
+    tool_input: Dict[str, Any],
+    workspace_dir: str,
+    user_id: str = "",
+) -> Dict[str, Any]:
     """Perform the actual side effect of a tool the user has approved.
 
     `tool_input` MUST be the same dict that was passed when generating
-    the confirmation envelope. `workspace_dir` and `reminders_path` come
-    from state. Returns the human-readable result string the assistant
-    will speak/display.
+    the confirmation envelope. User-owned reminders are stored in Firestore.
+    Returns the human-readable result the assistant will speak/display.
     """
     if tool_name == "open_application":
         key = (tool_input.get("name", "") or "").strip().lower()
         alias = APP_ALIASES.get(key)
         if not alias:
-            return f"I don't know how to open '{key}'."
-        os.system(f"start {alias}")
-        return f"Opening {key}."
+            return {"success": False, "text": f"I don't know how to open '{key}'."}
+        try:
+            import subprocess
+            process = subprocess.Popen([alias])
+        except OSError as error:
+            return {"success": False, "text": f"Could not launch {key}: {error}"}
+        return {
+            "success": True,
+            "text": f"Opening {key}.",
+            "data": {"pid": process.pid, "executable": alias},
+        }
 
     if tool_name == "open_website":
         key = (tool_input.get("url_or_alias", "") or "").strip().lower()
         url = WEBSITE_ALLOWLIST.get(key)
         if not url:
-            return "That site isn't on the allowlist."
-        webbrowser.open(url)
-        return f"Opening {url}."
+            return {"success": False, "text": "That site isn't on the allowlist."}
+        if not webbrowser.open(url):
+            return {"success": False, "text": f"Could not open {url}."}
+        return {"success": True, "text": f"Opening {url}.", "data": {"url": url}}
+
+    if tool_name == "create_folder":
+        try:
+            abs_path = _resolve_under_workspace(workspace_dir, tool_input.get("path", ""))
+            os.mkdir(abs_path)
+        except (OSError, ValueError) as e:
+            return {"success": False, "text": f"Could not create folder: {e}"}
+        return {"success": True, "text": f"Created folder {abs_path}.", "data": {"path": abs_path}}
+
+    if tool_name == "open_folder":
+        try:
+            abs_path = _resolve_under_workspace(workspace_dir, tool_input.get("path", ""))
+            if not os.path.isdir(abs_path):
+                return {"success": False, "text": f"{abs_path} is not a directory."}
+            os.startfile(abs_path)
+        except (OSError, ValueError, AttributeError) as e:
+            return {"success": False, "text": f"Could not open folder: {e}"}
+        return {"success": True, "text": f"Opened folder {abs_path}.", "data": {"path": abs_path}}
 
     if tool_name == "write_file":
         path = tool_input.get("path", "")
@@ -551,11 +697,22 @@ def run_confirmed(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str
         try:
             abs_path = _resolve_under_workspace(workspace_dir, path)
         except ValueError as e:
-            return str(e)
-        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
-        with open(abs_path, "w", encoding="utf-8") as fh:
-            fh.write(content)
-        return f"Wrote {len(content)} characters to {abs_path}."
+            return {"success": False, "text": str(e)}
+        try:
+            with open(abs_path, "x", encoding="utf-8") as fh:
+                fh.write(content)
+        except FileExistsError:
+            return {
+                "success": False,
+                "text": f"{abs_path} already exists. Existing files are not overwritten.",
+            }
+        except OSError as e:
+            return {"success": False, "text": f"Could not write file: {e}"}
+        return {
+            "success": True,
+            "text": f"Wrote {len(content)} characters to {abs_path}.",
+            "data": {"path": abs_path},
+        }
 
     if tool_name == "set_reminder":
         message = (tool_input.get("message", "") or "").strip()
@@ -563,41 +720,37 @@ def run_confirmed(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str
         try:
             fire_at = datetime.fromisoformat(fire_at_iso)
         except (TypeError, ValueError):
-            return f"'{fire_at_iso}' is not a valid ISO timestamp."
+            return {
+                "success": False,
+                "text": f"'{fire_at_iso}' is not a valid ISO timestamp.",
+            }
+        if not user_id:
+            return {
+                "success": False,
+                "text": "Sign in before saving a reminder.",
+            }
+        import db
 
-        entry = {
-            "id": str(int(time.time() * 1000)),
-            "message": message,
-            "fire_at_iso": fire_at.isoformat(),
-            "created_at_iso": datetime.now().isoformat(),
+        entry = db.save_reminder(user_id, message, fire_at)
+        return {
+            "success": True,
+            "text": f"Reminder saved for {fire_at.strftime('%Y-%m-%d %H:%M')}.",
+            "data": {"id": entry["id"], "fire_at_iso": entry["fire_at_iso"]},
         }
-        # Resolve reminders_path: if relative, anchor to the project dir.
-        if not os.path.isabs(reminders_path):
-            reminders_path_abs = os.path.join(os.path.dirname(__file__), reminders_path)
-        else:
-            reminders_path_abs = reminders_path
-
-        existing: List[Dict[str, Any]] = []
-        if os.path.exists(reminders_path_abs):
-            try:
-                with open(reminders_path_abs, "r", encoding="utf-8") as fh:
-                    existing = json.load(fh)
-                if not isinstance(existing, list):
-                    existing = []
-            except (OSError, ValueError):
-                existing = []
-        existing.append(entry)
-        with open(reminders_path_abs, "w", encoding="utf-8") as fh:
-            json.dump(existing, fh, indent=2)
-        return f"Reminder saved for {fire_at.strftime('%Y-%m-%d %H:%M')}."
 
     if tool_name == "run_shell_command":
         command = (tool_input.get("command", "") or "").strip()
         if not _SAFE_SHELL_RX.match(command):
-            return "command not in allowlist, please run it manually."
+            return {
+                "success": False,
+                "text": "command not in allowlist, please run it manually.",
+            }
         head = command.split(maxsplit=1)[0].lower()
         if head not in SHELL_ALLOWLIST:
-            return "command not in allowlist, please run it manually."
+            return {
+                "success": False,
+                "text": "command not in allowlist, please run it manually.",
+            }
         try:
             import subprocess
             completed = subprocess.run(
@@ -613,22 +766,32 @@ def run_confirmed(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str
                 output = "(no output)"
             if len(output) > SHELL_OUTPUT_MAX_CHARS:
                 output = output[:SHELL_OUTPUT_MAX_CHARS] + "\n[...truncated]"
-            return f"`{command}` ->\n{output}"
+            if completed.returncode != 0:
+                return {
+                    "success": False,
+                    "text": f"`{command}` failed with exit code {completed.returncode}:\n{output}",
+                    "data": {"returncode": completed.returncode},
+                }
+            return {
+                "success": True,
+                "text": f"`{command}` ->\n{output}",
+                "data": {"returncode": completed.returncode, "output": output},
+            }
         except subprocess.TimeoutExpired:
-            return f"`{command}` timed out after 15 seconds."
+            return {"success": False, "text": f"`{command}` timed out after 15 seconds."}
         except Exception as e:
-            return f"`{command}` failed: {e}"
+            return {"success": False, "text": f"`{command}` failed: {e}"}
 
     if tool_name == "close_app":
         try:
             import pyautogui
             time.sleep(0.5)
             pyautogui.hotkey("alt", "f4")
-            return "Sent Alt+F4 to the active window."
+            return {"success": True, "text": "Sent Alt+F4 to the active window."}
         except Exception as e:
-            return f"Could not send Alt+F4: {e}"
+            return {"success": False, "text": f"Could not send Alt+F4: {e}"}
 
-    return f"Unknown tool: {tool_name}"
+    return {"success": False, "text": f"Unknown tool: {tool_name}"}
 
 
 def invoke_tool(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str) -> ToolOutcome:

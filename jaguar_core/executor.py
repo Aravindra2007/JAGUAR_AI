@@ -84,6 +84,7 @@ class PlanExecutor:
         llm_model: str = "",
         llm_temperature: float = 0.3,
         ollama_host: Optional[str] = None,
+        user_id: str = "",
     ):
         self.headless_browser = headless_browser
         self.llm_provider = llm_provider
@@ -91,6 +92,7 @@ class PlanExecutor:
         self.llm_model = llm_model
         self.llm_temperature = llm_temperature
         self.ollama_host = ollama_host
+        self.user_id = str(user_id)
 
         self.browser = BrowserAutomation(headless=headless_browser)
         self.system = SystemAutomation()
@@ -153,6 +155,7 @@ class PlanExecutor:
                 kind="job_search",
                 title=f"{step.target or step.description}",
                 detail=f"Found {len(jobs)} job(s)",
+                user_id=self.user_id,
             )
             return StepReport(step.id, action, step.description, res.ok,
                               res.message, data=res.data)
@@ -233,6 +236,7 @@ class PlanExecutor:
                     title=(job.get("title") or "Untitled role"),
                     detail=f"{job.get('company') or 'Unknown'} - {job.get('url') or ''}",
                     status=("applied" if r.ok else "attempted"),
+                    user_id=self.user_id,
                 )
             return StepReport(step.id, action, step.description,
                               bool(applied), f"Attempted {len(applied)} application(s).",

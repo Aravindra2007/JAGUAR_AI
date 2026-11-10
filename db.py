@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import auth as firebase_auth, credentials, firestore
 
 from flask import current_app
 from supabase import create_client
@@ -136,6 +136,21 @@ def _storage():
         raise StorageError(
             "Could not initialize Supabase."
         ) from exc
+
+
+def get_supabase_client():
+    """Return the server-side Supabase client for structured cloud data."""
+    return _storage()
+
+
+def verify_firebase_id_token(token: str) -> Dict[str, Any]:
+    if not token:
+        raise DBError("Firebase ID token is required.")
+    _client()
+    try:
+        return firebase_auth.verify_id_token(token, check_revoked=True)
+    except Exception as exc:
+        raise DBError("Firebase ID token is invalid or expired.") from exc
 
 
 def _bucket():
@@ -315,6 +330,10 @@ def get_user_by_username(username: str):
     return _find_user("username", username)
 
 
+def get_user_by_email(email: str):
+    return _find_user("email", (email or "").strip().lower())
+
+
 # ==========================================================
 # OTP VERIFICATION
 # ==========================================================
@@ -450,6 +469,72 @@ def clear_chat_history(user_id: str) -> None:
 
 
 # ==========================================================
+# REMINDERS
+# ==========================================================
+
+def save_reminder(
+    user_id: str,
+    message: str,
+    fire_at: datetime,
+) -> Dict[str, Any]:
+    if not user_id:
+        raise DBError("An authenticated user is required to save a reminder.")
+    if fire_at.tzinfo is None:
+        fire_at = fire_at.astimezone()
+    fire_at = fire_at.astimezone(timezone.utc)
+    reminder_id = uuid.uuid4().hex
+    row = {
+        "id": reminder_id,
+        "user_id": str(user_id),
+        "message": message,
+        "fire_at": fire_at,
+        "fire_at_iso": fire_at.isoformat(),
+        "created_at": _now(),
+        "status": "pending",
+    }
+    _client().collection("reminders").document(reminder_id).set(row)
+    return {**row, "fire_at_iso": fire_at.isoformat()}
+
+
+def list_reminders(user_id: str, *, pending_only: bool = False) -> List[Dict[str, Any]]:
+    if not user_id:
+        raise DBError("An authenticated user is required to list reminders.")
+    query = _client().collection("reminders").where(
+        filter=firestore.FieldFilter("user_id", "==", str(user_id))
+    )
+    if pending_only:
+        query = query.where(
+            filter=firestore.FieldFilter("status", "==", "pending")
+        )
+    return [
+        {"id": snapshot.id, **(snapshot.to_dict() or {})}
+        for snapshot in query.stream()
+    ]
+
+
+def mark_reminder_delivered(user_id: str, reminder_id: str) -> bool:
+    if not user_id:
+        raise DBError("An authenticated user is required to update a reminder.")
+    reference = _client().collection("reminders").document(reminder_id)
+    snapshot = reference.get()
+    row = snapshot.to_dict() if snapshot.exists else None
+    if not row or row.get("user_id") != str(user_id):
+        return False
+    reference.update({"status": "delivered", "delivered_at": _now()})
+    return True
+
+
+def get_reminder(user_id: str, reminder_id: str) -> Optional[Dict[str, Any]]:
+    if not user_id:
+        raise DBError("An authenticated user is required to read a reminder.")
+    snapshot = _client().collection("reminders").document(reminder_id).get()
+    row = snapshot.to_dict() if snapshot.exists else None
+    if not row or row.get("user_id") != str(user_id):
+        return None
+    return {"id": snapshot.id, **row}
+
+
+# ==========================================================
 # SUPABASE FILE STORAGE
 # ==========================================================
 
@@ -484,21 +569,20 @@ def _read_upload(
 ) -> Tuple[bytes, str, str]:
 
     """
-    Accepts either:
-    - Flask FileStorage object
-    - Local filepath (backward compatibility)
+    Accepts an in-memory upload stream.
 
     Returns file bytes, safe filename and MIME type.
     """
 
-    if hasattr(upload, "stream"):
+    if hasattr(upload, "stream") or hasattr(upload, "read"):
 
         filename = (
             getattr(upload, "filename", None)
+            or getattr(upload, "name", None)
             or filename
         )
 
-        stream = upload.stream
+        stream = getattr(upload, "stream", upload)
         stream.seek(0, 2)
         size = stream.tell()
         stream.seek(0)
@@ -511,27 +595,8 @@ def _read_upload(
             or "application/octet-stream"
         )
 
-    elif isinstance(upload, (str, os.PathLike)):
-
-        path = Path(upload)
-
-        if not path.is_file():
-            raise StorageError("Local upload file not found.")
-
-        filename = filename or path.name
-
-        size = path.stat().st_size
-
-        with open(path, "rb") as f:
-            content = f.read()
-
-        content_type = (
-            mimetypes.guess_type(filename)[0]
-            or "application/octet-stream"
-        )
-
     else:
-        raise StorageError("Invalid upload object.")
+        raise StorageError("Only in-memory upload streams are accepted.")
 
     if size <= 0 or size > max_size:
         raise StorageError("File size is invalid or exceeds the limit.")
@@ -693,8 +758,7 @@ def save_uploaded_file(
     Upload actual file to Supabase.
     Save its cloud path and metadata in Firestore.
 
-    filepath accepts a Flask FileStorage object
-    or an existing local filepath.
+    filepath must be an in-memory upload stream.
     """
 
     if not get_user_by_id(user_id):
@@ -828,7 +892,8 @@ def update_user_profile(
 
 def update_profile_photo(
     user_id: str,
-    photo_path
+    photo_upload,
+    filename: str = "profile.jpg",
 ) -> str:
     """
     Upload profile picture to Supabase.
@@ -847,12 +912,16 @@ def update_profile_photo(
     cloud_path = None
 
     try:
-        # Upload actual local file to Supabase.
+        upload_name = (
+            getattr(photo_upload, "filename", None)
+            or getattr(photo_upload, "name", None)
+            or filename
+        )
         cloud_path = upload_to_supabase(
             user_id=user_id,
-            upload=photo_path,
+            upload=photo_upload,
             folder="profiles",
-            filename=Path(photo_path).name
+            filename=Path(upload_name).name,
         )
 
         # Save Supabase path in Firestore.

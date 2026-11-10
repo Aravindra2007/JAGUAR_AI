@@ -31,8 +31,6 @@ import random
 import secrets
 import uuid
 
-from pathlib import Path
-
 from flask import (
     Blueprint,
     render_template,
@@ -716,8 +714,6 @@ def upload_profile_photo():
             url_for("auth.profile")
         )
 
-    destination = None
-
     try:
 
         # --------------------------
@@ -753,51 +749,20 @@ def upload_profile_photo():
             Image.Resampling.LANCZOS
         )
 
-        # --------------------------
-        # Create upload directory
-        # --------------------------
-
-        upload_dir = (
-            Path(current_app.static_folder)
-            / "profile_photos"
-        )
-
-        upload_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        # Generate safe random filename
         filename = (
             f"{uuid.uuid4().hex}.jpg"
         )
-
-        destination = (
-            upload_dir / filename
-        )
-
-        # Convert uploaded photo to JPEG
-        image.save(
-            destination,
-            format="JPEG",
-            quality=88,
-            optimize=True
-        )
-
-        # Pass the actual local file path to Supabase.
+        image_buffer = io.BytesIO()
+        image.save(image_buffer, format="JPEG", quality=88, optimize=True)
+        image_buffer.seek(0)
         try:
             cloud_path = db.update_profile_photo(
                 str(current_user.id),
-                str(destination)
+                image_buffer,
+                filename=filename,
             )
-
-        except Exception:
-
-            destination.unlink(
-                missing_ok=True
-            )
-
-            raise
+        finally:
+            image_buffer.close()
 
         flash(
             "Profile photo updated successfully!",
@@ -983,4 +948,3 @@ def update_password():
     return redirect(
         url_for("auth.profile")
     )
-

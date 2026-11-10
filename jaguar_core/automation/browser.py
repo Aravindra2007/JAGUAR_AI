@@ -15,7 +15,6 @@ result the caller can log and continue from.
 from __future__ import annotations
 
 import json
-import os
 import time
 import webbrowser
 from dataclasses import dataclass, field
@@ -54,11 +53,8 @@ class BrowserAutomation:
 
     def __init__(self, headless: bool = False, user_data_dir: Optional[str] = None):
         self.headless = headless
-        self.user_data_dir = user_data_dir or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "jaguar_data", "browser_profile",
-        )
-        os.makedirs(self.user_data_dir, exist_ok=True)
+        if user_data_dir:
+            raise ValueError("Persistent local browser profiles are disabled.")
 
         self._playwright = None
         self._browser = None
@@ -77,16 +73,8 @@ class BrowserAutomation:
         if self._sync is None:
             return None
         self._playwright = self._sync.start()
-        try:
-            self._browser = self._playwright.chromium.launch_persistent_context(
-                user_data_dir=self.user_data_dir,
-                headless=self.headless,
-            )
-            self._context = self._browser
-        except Exception:
-            # Fall back to a non-persistent context if launch_persistent_context fails
-            self._browser = self._playwright.chromium.launch(headless=self.headless)
-            self._context = self._browser.new_context()
+        self._browser = self._playwright.chromium.launch(headless=self.headless)
+        self._context = self._browser.new_context()
         if self._context.pages:
             self._page = self._context.pages[0]
         else:
@@ -98,6 +86,11 @@ class BrowserAutomation:
         try:
             if self._context is not None:
                 self._context.close()
+        except Exception:
+            pass
+        try:
+            if self._browser is not None:
+                self._browser.close()
         except Exception:
             pass
         try:

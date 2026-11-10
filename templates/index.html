@@ -1150,7 +1150,17 @@ async function resolveConfirm(token, decision, card) {
 
   card.remove();
 
-  addMessage('assistant', data.response);
+  const response = data.response;
+  if (
+    response &&
+    typeof response === 'object' &&
+    response.type === 'needs_confirmation'
+  ) {
+    const env = response.envelope || {};
+    addConfirmCard(env.prompt || 'Confirm this action?', env.token);
+  } else {
+    addMessage('assistant', response);
+  }
 }
 
 /* ================= HISTORY ================= */
