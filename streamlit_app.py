@@ -234,11 +234,7 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
         )
     )
 
-    # --- Phase 1: tool-use fields ---
-    # These need to be in scope for ALL providers, since
-    # state.set_llm_config() always writes them. The Claude branch
-    # below overrides these with actual UI controls (toggle + text
-    # input); for other providers we just keep the saved defaults.
+    # Tool-use settings are shared by all providers.
     tools_enabled = cfg.get("tools_enabled", False)
     workspace_dir = cfg.get("workspace_dir", "~")
 
@@ -319,28 +315,6 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
 
         ollama_host = cfg.get("ollama_host", "")
 
-        # --- Phase 1: tool-use controls (Anthropic only) ---
-        st.markdown("---")
-        st.markdown("**🛠️ Tool-use (Phase 1)**")
-        tools_enabled = st.toggle(
-            "Enable tool-use (Claude only)",
-            value=cfg.get("tools_enabled", False),
-            help=(
-                "Allows Claude to call local PC tools (open apps, read/write "
-                "files in the workspace, run a small set of shell commands, "
-                "set reminders). Mutating actions will ask for your approval."
-            ),
-        )
-        workspace_dir = st.text_input(
-            "Workspace folder (tool-use sandbox)",
-            value=cfg.get("workspace_dir", "~"),
-            help=(
-                "Filesystem root for read_file / write_file / list_directory. "
-                "Paths outside this folder are refused. Use ~ for your home "
-                "directory or pick a project folder."
-            ),
-        )
-
     # ===========================================================
     # OLLAMA
     # ===========================================================
@@ -360,8 +334,27 @@ with st.sidebar.expander("🧠 LLM settings", expanded=False):
             value=cfg.get("ollama_host") or "http://localhost:11434"
         )
 
-        # tools_enabled / workspace_dir are defined above so they're
-        # in scope for all providers.
+    st.markdown("---")
+    st.markdown("**🛠️ Local tools**")
+    tools_enabled = st.toggle(
+        "Enable local tools",
+        value=cfg.get("tools_enabled", False),
+        help=(
+            "Allows the selected provider to use allowlisted local tools "
+            "(open apps, read/write workspace files, run approved commands, "
+            "and set reminders). Actions that change your computer require "
+            "your approval first."
+        ),
+    )
+    workspace_dir = st.text_input(
+        "Workspace folder (tool-use sandbox)",
+        value=cfg.get("workspace_dir", "~"),
+        help=(
+            "Filesystem root for read_file / write_file / list_directory. "
+            "Paths outside this folder are refused. Use ~ for your home "
+            "directory or pick a project folder."
+        ),
+    )
 
     # ===========================================================
     # COMMON SETTINGS

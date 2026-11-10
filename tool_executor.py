@@ -1,5 +1,5 @@
 """
-Tool executor for Jaguar AI's Claude tool-use loop.
+Tool executor for Jaguar AI's allowlisted tool-use flow.
 
 The executor is the single place that decides whether a Claude-requested
 tool action should run immediately, ask for user confirmation, or be
@@ -32,7 +32,7 @@ import state
 
 
 class ToolExecutor:
-    """Dispatches Anthropic `tool_use` blocks to the matching handler."""
+    """Dispatches model tool requests to the matching handler."""
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class ToolExecutor:
         allowlist: Optional[set] = None,
         commands: Optional[Commands] = None,
     ):
-        self.workspace_dir = workspace_dir or os.path.expanduser("~")
+        self.workspace_dir = os.path.expanduser(workspace_dir or "~")
         self.allowlist = allowlist  # currently informational; tools.py enforces it
         self.commands = commands if commands is not None else Commands()
 

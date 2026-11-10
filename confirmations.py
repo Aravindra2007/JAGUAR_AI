@@ -1,7 +1,7 @@
 """
 Confirmation envelopes for tool-use.
 
-When the Claude tool-use loop wants to perform a mutating action, the
+When a model tool-use request wants to perform a mutating action, the
 tool executor does NOT execute it directly. Instead it returns a small
 "needs_confirmation" envelope dict that the router forwards to whatever
 UI surface asked. The user responds by Approve/Deny (Streamlit) or

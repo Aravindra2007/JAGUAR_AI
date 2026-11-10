@@ -69,10 +69,16 @@ APP_ALIASES = {
 WEBSITE_ALLOWLIST = {
     "google": "https://google.com",
     "youtube": "https://youtube.com",
+    "gmail": "https://mail.google.com",
+    "spotify": "https://open.spotify.com",
     "github": "https://github.com",
     "chatgpt": "https://chat.openai.com",
     "stack overflow": "https://stackoverflow.com",
     "wikipedia": "https://wikipedia.org",
+    "irctc": "https://www.irctc.co.in",
+    "bookmyshow": "https://in.bookmyshow.com",
+    "redbus": "https://www.redbus.in",
+    "tirupati": "https://tirupatibalaji.ap.gov.in",
 }
 
 WORKSPACE_MAX_READ_CHARS = 8000
@@ -157,13 +163,13 @@ def open_application(name: str, workspace_dir: str = "") -> ToolOutcome:
 
 
 def open_website(url_or_alias: str, workspace_dir: str = "") -> ToolOutcome:
-    """Open a website by alias (must be on WEBSITE_ALLOWLIST)."""
+    """Open an allowlisted website after the user confirms."""
     key = (url_or_alias or "").strip().lower()
     if key in WEBSITE_ALLOWLIST:
         return ToolOutcome(
-            text=f"Opening {WEBSITE_ALLOWLIST[key]}.",
-            mutating=False,
-            confirmation_prompt=None,
+            text=f"Will open {WEBSITE_ALLOWLIST[key]}.",
+            mutating=True,
+            confirmation_prompt=f"Open {key}?",
         )
     return ToolOutcome(
         text=(
@@ -353,8 +359,9 @@ TOOLS: List[Dict[str, Any]] = [
         "name": "open_website",
         "description": (
             "Open a website in the user's default browser by an alias from "
-            "the allowlist: google, youtube, github, chatgpt, stack overflow, "
-            "wikipedia. Reading-only from the user's perspective."
+            "the allowlist: google, youtube, gmail, spotify, github, chatgpt, "
+            "stack overflow, wikipedia, irctc, bookmyshow, redbus, tirupati. "
+            "Requires user confirmation before opening."
         ),
         "input_schema": {
             "type": "object",

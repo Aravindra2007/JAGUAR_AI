@@ -153,7 +153,7 @@ def status():
 
 @app.route("/set-llm-config", methods=["POST"])
 def set_llm_config():
-    data = request.json
+    data = request.get_json() or {}
 
     state.set_llm_config(
         enabled=True,
@@ -163,8 +163,8 @@ def set_llm_config():
         temperature=0.7,
         system_prompt="You are Jaguar AI",
         ollama_host="http://localhost:11434",
-        tools_enabled=False,
-        workspace_dir="~"
+        tools_enabled=bool(data.get("tools_enabled", False)),
+        workspace_dir=data.get("workspace_dir") or "~",
     )
 
     return {"success": True}

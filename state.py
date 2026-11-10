@@ -118,7 +118,7 @@ _llm_config = {
     "temperature": 0.7,
     "system_prompt": DEFAULT_SYSTEM_PROMPT,
     "ollama_host": "",
-    # --- Tool-use (Phase 1, Anthropic only) ---
+    # --- Optional local tool-use ---
     "tools_enabled": True,
     "workspace_dir": os.path.expanduser("~"),
     "reminders_path": "reminders.json",
