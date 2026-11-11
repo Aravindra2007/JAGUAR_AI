@@ -136,6 +136,32 @@ class ToolExecutor:
         outcome = invoke_tool(tool_name, tool_input, self.workspace_dir)
 
         if outcome.mutating:
+            if self._has_document_directory_approval(tool_name, tool_input):
+                try:
+                    execution_result = run_confirmed(
+                        tool_name=tool_name,
+                        tool_input=tool_input,
+                        workspace_dir=self.workspace_dir,
+                        user_id=self.user_id,
+                    )
+                except Exception as error:
+                    execution_result = {
+                        "success": False,
+                        "text": f"Tool execution failed: {error}",
+                    }
+                observation = self.observer.verify(
+                    tool_name,
+                    tool_input,
+                    execution_result,
+                )
+                return {
+                    "kind": "result",
+                    "text": execution_result.get("text", observation["message"]),
+                    "success": observation["verified"],
+                    "observation": observation,
+                    "tool_use_id": tool_use_id,
+                }
+
             prompt = outcome.confirmation_prompt or format_prompt(tool_name, tool_input)
             envelope = build_envelope(tool_name, tool_input, prompt)
             # Persist on the executor for execute_confirmed to find. We
@@ -162,6 +188,22 @@ class ToolExecutor:
             "observation": observation,
             "tool_use_id": tool_use_id,
         }
+
+    def _has_document_directory_approval(self, tool_name, tool_input):
+        if tool_name != "write_file":
+            return False
+        try:
+            path = _resolve_under_workspace(
+                self.workspace_dir,
+                tool_input.get("path", ""),
+            )
+        except ValueError:
+            return False
+        return state.has_document_directory_approval(
+            self.user_id,
+            self.workspace_dir,
+            os.path.dirname(path),
+        )
 
     # ------------------------------------------------------------------
     # Walk a response.content list
@@ -333,6 +375,19 @@ class ToolExecutor:
             pending["tool_input"],
             execution_result,
         )
+        if (
+            pending["tool_name"] == "write_file"
+            and observation.get("verified")
+        ):
+            approved_path = _resolve_under_workspace(
+                self.workspace_dir,
+                pending["tool_input"]["path"],
+            )
+            state.remember_document_directory_approval(
+                self.user_id,
+                self.workspace_dir,
+                os.path.dirname(approved_path),
+            )
         return {
             "success": observation["verified"],
             "text": execution_result.get("text", observation["message"]),

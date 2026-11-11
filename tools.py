@@ -219,7 +219,7 @@ def list_directory(path: str, workspace_dir: str) -> ToolOutcome:
 
 
 def read_file(path: str, workspace_dir: str) -> ToolOutcome:
-    """Read-only: read a text file under the workspace (truncated)."""
+    """Read supported text, PDF, Word, and image files under the workspace."""
     if not workspace_dir:
         return ToolOutcome(
             text="No workspace folder is configured.",
@@ -240,11 +240,34 @@ def read_file(path: str, workspace_dir: str) -> ToolOutcome:
             success=False,
         )
 
-    try:
-        with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
-            content = fh.read(WORKSPACE_MAX_READ_CHARS)
-    except OSError as e:
-        return ToolOutcome(text=f"Could not read file: {e}", mutating=False, confirmation_prompt=None, success=False)
+    extension = os.path.splitext(abs_path)[1].lower()
+    import file_reader
+    reader_extensions = (
+        file_reader.PDF_EXTENSIONS
+        | file_reader.DOCX_EXTENSIONS
+        | file_reader.IMAGE_EXTENSIONS
+    )
+    if extension in reader_extensions:
+        content = file_reader.extract_text(abs_path)
+        if content.startswith((
+            "(Could not",
+            "(PDF reading requires",
+            "(Word reading requires",
+            "(Image received.",
+            "(No extractable text found in this PDF.",
+        )):
+            return ToolOutcome(
+                text=content,
+                mutating=False,
+                confirmation_prompt=None,
+                success=False,
+            )
+    else:
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.read(WORKSPACE_MAX_READ_CHARS)
+        except OSError as e:
+            return ToolOutcome(text=f"Could not read file: {e}", mutating=False, confirmation_prompt=None, success=False)
 
     if len(content) == WORKSPACE_MAX_READ_CHARS:
         content += "\n\n[...truncated]"
@@ -285,7 +308,11 @@ def write_file(path: str, content: str, workspace_dir: str) -> ToolOutcome:
     return ToolOutcome(
         text=f"Will write {len(content or '')} characters to {abs_path}.",
         mutating=True,
-        confirmation_prompt=f"Write {len(content or '')} characters to {abs_path}?",
+        confirmation_prompt=(
+            f"Write {len(content or '')} characters to {abs_path}? "
+            f"Approving also allows creating additional files in {os.path.dirname(abs_path)} "
+            "without asking again until Jaguar restarts. Existing files are never overwritten."
+        ),
     )
 
 
@@ -472,8 +499,11 @@ TOOLS: List[Dict[str, Any]] = [
     {
         "name": "read_file",
         "description": (
-            "Read a text file under the workspace. Truncated to 8000 characters. "
-            "Refuses paths outside the workspace."
+            "Read a text, PDF, DOCX, or common image file under the workspace. "
+            "PDFs and DOCX files have their text extracted; images use OCR and "
+            "require pytesseract, Pillow, and the Tesseract engine. Scanned PDFs "
+            "without embedded text are not OCR-processed. Output is truncated "
+            "to 8000 characters. Refuses paths outside the workspace."
         ),
         "input_schema": {
             "type": "object",

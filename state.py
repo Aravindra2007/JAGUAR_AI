@@ -129,6 +129,7 @@ _llm_config = {
 # either approve or deny; the executor stores one here until the user
 # responds, then pops it.
 _pending_confirmations = {}
+_approved_document_directories = set()
 
 DEFAULT_LANGUAGE = "English"
 _language = DEFAULT_LANGUAGE
@@ -266,6 +267,26 @@ def take_pending_confirmation(token, user_id=None):
             return None, False
         expired = envelope.get("expires_at", 0) <= time.time()
         return (None, True) if expired else (envelope, False)
+
+
+def remember_document_directory_approval(user_id, workspace_dir, directory):
+    key = (
+        str(user_id or ""),
+        os.path.normcase(os.path.realpath(os.path.abspath(workspace_dir))),
+        os.path.normcase(os.path.realpath(os.path.abspath(directory))),
+    )
+    with _lock:
+        _approved_document_directories.add(key)
+
+
+def has_document_directory_approval(user_id, workspace_dir, directory):
+    key = (
+        str(user_id or ""),
+        os.path.normcase(os.path.realpath(os.path.abspath(workspace_dir))),
+        os.path.normcase(os.path.realpath(os.path.abspath(directory))),
+    )
+    with _lock:
+        return key in _approved_document_directories
 
 
 def peek_pending_confirmation(token):

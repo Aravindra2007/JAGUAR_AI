@@ -162,6 +162,85 @@ class PlanExecutionTests(unittest.TestCase):
             ["completed", "completed"],
         )
 
+    def test_approved_document_directory_skips_related_file_confirmations(self):
+        documents = os.path.join(self.temp_dir.name, "documents")
+        os.mkdir(documents)
+        executor = ToolExecutor(
+            workspace_dir=self.temp_dir.name,
+            user_id="document-owner",
+        )
+        result = execute_plan({
+            "goal": "Create two related document files",
+            "steps": [
+                {
+                    "id": "first",
+                    "tool": "write_file",
+                    "input": {"path": "documents/first.txt", "content": "first"},
+                    "depends_on": [],
+                },
+                {
+                    "id": "second",
+                    "tool": "write_file",
+                    "input": {"path": "documents/second.txt", "content": "second"},
+                    "depends_on": [],
+                },
+            ],
+        }, executor, continuation={"user_id": "document-owner"})
+
+        self.assertEqual(result["kind"], "confirmation")
+        self.assertIn("without asking again until Jaguar restarts", result["envelope"]["prompt"])
+
+        result = resume_plan(result["envelope"]["token"], "yes", executor)
+
+        self.assertEqual(result["kind"], "result")
+        self.assertTrue(result["success"])
+        self.assertTrue(os.path.isfile(os.path.join(documents, "first.txt")))
+        self.assertTrue(os.path.isfile(os.path.join(documents, "second.txt")))
+
+    def test_document_approval_does_not_cover_other_directories_or_users(self):
+        documents = os.path.join(self.temp_dir.name, "documents")
+        other_directory = os.path.join(self.temp_dir.name, "other")
+        os.mkdir(documents)
+        os.mkdir(other_directory)
+        owner_executor = ToolExecutor(
+            workspace_dir=self.temp_dir.name,
+            user_id="document-owner",
+        )
+        result = owner_executor.execute(
+            "write_file",
+            {"path": "documents/approved.txt", "content": "approved"},
+        )
+        approved = owner_executor.execute_confirmed_result(result["token"], "yes")
+        self.assertTrue(approved["success"])
+
+        different_directory = owner_executor.execute(
+            "write_file",
+            {"path": "other/unapproved.txt", "content": "not approved"},
+        )
+        different_user = ToolExecutor(
+            workspace_dir=self.temp_dir.name,
+            user_id="another-user",
+        ).execute(
+            "write_file",
+            {"path": "documents/other-user.txt", "content": "not approved"},
+        )
+        existing_file = owner_executor.execute(
+            "write_file",
+            {"path": "documents/approved.txt", "content": "overwrite"},
+        )
+        other_action = owner_executor.execute(
+            "create_folder",
+            {"path": "documents/new-folder"},
+        )
+
+        self.assertEqual(different_directory["kind"], "confirmation")
+        self.assertEqual(different_user["kind"], "confirmation")
+        self.assertEqual(existing_file["kind"], "result")
+        self.assertFalse(existing_file["success"])
+        self.assertEqual(other_action["kind"], "confirmation")
+        with open(os.path.join(documents, "approved.txt"), encoding="utf-8") as file:
+            self.assertEqual(file.read(), "approved")
+
     def test_pending_plan_can_only_be_resumed_by_its_owner(self):
         owner_executor = ToolExecutor(
             workspace_dir=self.temp_dir.name,

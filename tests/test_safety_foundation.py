@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import state
 from router import CommandRouter
@@ -51,6 +51,39 @@ class ToolExecutorSafetyTests(unittest.TestCase):
         self.assertIn("not overwritten", result["text"])
         with open(target, encoding="utf-8") as file:
             self.assertEqual(file.read(), "keep this")
+
+    def test_read_file_extracts_pdf_and_image_text(self):
+        for filename, extracted in (
+            ("report.pdf", "PDF contents"),
+            ("diagram.png", "Image OCR contents"),
+        ):
+            with self.subTest(filename=filename):
+                path = os.path.join(self.temp_dir.name, filename)
+                with open(path, "wb") as file:
+                    file.write(b"placeholder")
+
+                with patch("file_reader.extract_text", return_value=extracted) as extract:
+                    result = self.executor.execute("read_file", {"path": filename})
+
+                self.assertEqual(result["kind"], "result")
+                self.assertTrue(result["success"])
+                self.assertEqual(result["text"], extracted)
+                extract.assert_called_once_with(path)
+
+    def test_read_image_reports_missing_ocr_dependencies(self):
+        path = os.path.join(self.temp_dir.name, "diagram.png")
+        with open(path, "wb") as file:
+            file.write(b"placeholder")
+
+        with patch(
+            "file_reader.extract_text",
+            return_value="(Image received. Text extraction needs OCR.)",
+        ):
+            result = self.executor.execute("read_file", {"path": "diagram.png"})
+
+        self.assertEqual(result["kind"], "result")
+        self.assertFalse(result["success"])
+        self.assertIn("OCR", result["text"])
 
     def test_approval_is_single_use_and_rechecked_before_writing(self):
         result = self.executor.execute(

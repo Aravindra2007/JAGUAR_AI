@@ -1,6 +1,5 @@
 """
-Document/image ingestion for Jaguar AI's "read this and help me with
-it" upload feature (/upload in app.py).
+Document/image ingestion for uploads and workspace file-reading tools.
 
 Supported today:
     .txt, .md            -> read directly
@@ -11,6 +10,7 @@ Supported today:
                              still store the image and tell the model
                              it received an image it can't read text
                              from yet, rather than failing the upload.
+    scanned .pdf          -> no OCR; reports when no embedded text exists.
 
 Every extractor is defensive: a broken/unsupported file never crashes
 the upload endpoint, it just returns a short explanatory string that
@@ -53,7 +53,10 @@ def _extract_pdf(source) -> str:
         pages = []
         for page in reader.pages:
             pages.append(page.extract_text() or "")
-        return "\n".join(pages)
+        text = "\n".join(pages).strip()
+        if not text:
+            return "(No extractable text found in this PDF. Scanned PDFs require OCR.)"
+        return text
     except Exception as e:
         return f"(Could not read this PDF: {e})"
 
