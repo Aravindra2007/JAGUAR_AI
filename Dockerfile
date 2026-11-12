@@ -22,13 +22,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    JAGUAR_ENV=production \
     PORT=5000 \
-    API_PORT=8000 \
-    JAGUAR_DB_HOST="" \
-    JAGUAR_DB_PORT=3306 \
-    JAGUAR_DB_USER=root \
-    JAGUAR_DB_PASSWORD="" \
-    JAGUAR_DB_NAME=jaguar_ai
+    API_PORT=8000
 
 # OS deps: build-essential for any wheels that need compiling,
 # ffmpeg for Whisper audio, tesseract for OCR on uploads, and the
@@ -77,9 +73,8 @@ RUN if [ "$PLAYWRIGHT_BROWSERS" = "1" ]; then \
 # --- App ------------------------------------------------------------------
 COPY . .
 
-# Persistent, container-local data lives here. In production you'd
-# typically mount a volume at /app/jaguar_data and/or use a managed
-# database for MySQL.
+# Persistent, container-local data lives here. Production deployments
+# should use Firebase/Firestore and Supabase for application data.
 RUN mkdir -p /app/jaguar_data /app/uploads /app/logs
 VOLUME ["/app/jaguar_data", "/app/uploads", "/app/logs"]
 

@@ -12,6 +12,8 @@ flask-login
 python-dotenv
 Werkzeug
 itsdangerous
+gunicorn; platform_system != "Windows"
+waitress; platform_system == "Windows"
 
 
 # ============================================================================
@@ -56,8 +58,6 @@ firebase-admin
 # ============================================================================
 
 supabase>=2.0.0
-firebase-admin
-Werkzeug
 
 # ============================================================================
 # STREAMLIT ALTERNATIVE UI
@@ -113,68 +113,3 @@ playwright
 
 openai-whisper          # heavy; offline-capable once installed
 edge-tts                # lightweight TTS using Microsoft Edge voices
-
-
-
-# ============================================================================
-# BACKEND
-# ============================================================================
-
-Flask
-SpeechRecognition
-pyttsx3
-pyautogui
-pywhatkit
-#PyAudio
-
-
-
-# ============================================================================
-# STREAMLIT FRONTEND
-# ============================================================================
-
-streamlit
-streamlit-autorefresh
-
-
-
-# ============================================================================
-# LLM FALLBACK
-# router.py sends unmatched commands here
-# ============================================================================
-
-openai
-anthropic
-ollama
-google-generativeai
-
-
-
-# ============================================================================
-# TEXT-TO-SPEECH
-# ============================================================================
-
-gTTS
-# pygame            # replaces playsound: needed so Stop can interrupt gTTS playback mid-clip
-
-
-
-# ============================================================================
-# MYSQL + ACCOUNTS
-# ============================================================================
-
-PyMySQL
-flask-login
-python-dotenv
-
-
-
-# ============================================================================
-# FILE UPLOAD READING
-# Docs / Images for tasking
-# ============================================================================
-
-PyPDF2
-python-docx
-pytesseract       # optional OCR for images; also requires the Tesseract engine installed on the OS
-Pillow

@@ -1,6 +1,6 @@
 [Unit]
 Description=Jaguar AI - Flask GUI + FastAPI mobile API
-After=network.target mysql.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -8,7 +8,7 @@ Type=simple
 User=jaguar
 WorkingDirectory=/opt/jaguar
 EnvironmentFile=/etc/jaguar/jaguar.env
-ExecStart=/opt/jaguar/venv/bin/bash /opt/jaguar/deploy/start.sh
+ExecStart=/bin/bash /opt/jaguar/deploy/start.sh
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

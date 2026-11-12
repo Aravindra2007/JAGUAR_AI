@@ -1,6 +1,9 @@
 # Files / directories that should never make it into the image.
 .git
 .gitignore
+.env
+.env.*
+!.env.example
 .github
 .idea
 .vscode
@@ -40,3 +43,7 @@ Thumbs.db
 *.env.local
 *.pem
 *.key
+*adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+*credential*.json

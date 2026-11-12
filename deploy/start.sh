@@ -10,8 +10,8 @@ set -euo pipefail
 
 PORT="${PORT:-5000}"
 API_PORT="${API_PORT:-8000}"
-WORKERS="${WORKERS:-2}"
-API_WORKERS="${API_WORKERS:-2}"
+WORKERS="${WORKERS:-1}"
+API_WORKERS="${API_WORKERS:-1}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 
 echo "[jaguar] starting Flask GUI on 0.0.0.0:${PORT} (workers=${WORKERS})"
@@ -29,6 +29,7 @@ shutdown() {
 trap shutdown SIGTERM SIGINT
 
 # Flask GUI behind gunicorn (production WSGI server).
+export JAGUAR_ENV="${JAGUAR_ENV:-production}"
 gunicorn \
   --bind "0.0.0.0:${PORT}" \
   --workers "${WORKERS}" \

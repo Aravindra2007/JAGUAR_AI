@@ -130,7 +130,7 @@ Whether you prefer **cloud-based AI (OpenAI, Claude, Gemini)** or **privacy-firs
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Database** | Firebase / MySQL | Chat history & user authentication |
+| **Database** | Firebase / Firestore, Supabase | Chat history, authentication, uploads, and memory |
 | **Local Storage** | JSON | Reminders & configuration cache |
 | **State Management** | In-memory objects | Real-time conversation state |
 
@@ -307,7 +307,7 @@ Create a `.env` file in the project root:
 ```env
 # Flask Configuration
 JAGUAR_SECRET_KEY=your-secure-random-key-here
-FLASK_ENV=production
+JAGUAR_ENV=production
 
 # LLM Provider Keys
 ANTHROPIC_API_KEY=sk-ant-xxxxx
@@ -315,10 +315,9 @@ OPENAI_API_KEY=sk-xxxx
 GOOGLE_API_KEY=xxxxx
 OLLAMA_BASE_URL=http://localhost:11434  # If using local Ollama
 
-# Database Configuration
+# Firebase Configuration
 FIREBASE_CREDENTIALS_PATH=path/to/serviceAccountKey.json
-# OR
-DATABASE_URL=mysql://user:password@localhost:3306/jaguar_ai
+# For Docker Compose, use FIREBASE_CREDENTIALS_JSON instead, or mount the credentials file.
 
 # Voice Settings
 DEFAULT_LANGUAGE=en-US
@@ -557,7 +556,7 @@ docker run -it \
   jaguar-ai
 ```
 
-### Docker Compose (Multi-Service)
+### Docker Compose
 
 ```bash
 docker-compose up -d
@@ -565,8 +564,7 @@ docker-compose up -d
 
 Includes:
 - Jaguar AI service
-- Firebase emulator (optional)
-- MySQL database (optional)
+- Firebase/Firestore and Supabase integrations (configure credentials separately)
 
 ### Cloud Deployment
 
@@ -625,17 +623,7 @@ python -c "import os; print(os.getenv('ANTHROPIC_API_KEY'))"
 - **Solution 2**: Reduce conversation history length
 - **Solution 3**: Upgrade to higher-tier API plan
 
-#### 4. Database Connection Error
-
-```bash
-# Test database connection
-python -c "from jaguar_core.db import test_connection; test_connection()"
-
-# Check DATABASE_URL format
-DATABASE_URL=mysql://user:pass@host:3306/dbname
-```
-
-#### 5. Desktop Overlay Not Appearing
+#### 4. Desktop Overlay Not Appearing
 
 ```bash
 # Ensure tkinter is installed

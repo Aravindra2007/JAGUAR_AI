@@ -43,7 +43,7 @@ def is_speaking() -> bool:
 # ---------------------------------
 # The voice listener thread has no Flask request context, so it can't
 # see flask_login's current_user. Login/logout mirrors the id here so
-# voice-originated exchanges can still be saved to MySQL under the
+# voice-originated exchanges can still be saved to Firebase under the
 # right account.
 
 _current_user_id = None
@@ -124,6 +124,8 @@ _llm_config = {
     "tools_enabled": True,
     "workspace_dir": os.path.expanduser("~"),
 }
+_default_llm_config = dict(_llm_config)
+_user_llm_configs = {}
 
 # Pending confirmation envelopes keyed by uuid token. Both UI surfaces
 # (Streamlit button, voice listener) need to find a pending action to
@@ -263,17 +265,30 @@ def is_muted():
         return _muted
 
 
-def set_llm_config(**kwargs):
+def set_llm_config(user_id=None, **kwargs):
     """Update one or more LLM settings (provider, api_key, model,
     temperature, system_prompt, ollama_host, enabled, tools_enabled,
-    workspace_dir)."""
+    workspace_dir). When user_id is supplied, keep settings isolated
+    from the process-wide defaults and other users."""
     with _lock:
-        _llm_config.update(kwargs)
+        if user_id is None:
+            _llm_config.update(kwargs)
+        else:
+            config = _user_llm_configs.setdefault(
+                str(user_id),
+                dict(_default_llm_config),
+            )
+            config.update(kwargs)
 
 
-def get_llm_config():
+def get_llm_config(user_id=None):
     with _lock:
-        return dict(_llm_config)
+        config = (
+            _llm_config
+            if user_id is None
+            else _user_llm_configs.get(str(user_id), _default_llm_config)
+        )
+        return dict(config)
 
 
 # ---------------------------------

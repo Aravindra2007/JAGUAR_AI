@@ -1,4 +1,5 @@
 import os
+import secrets
 
 try:
     from dotenv import load_dotenv
@@ -34,7 +35,12 @@ except Exception as _e:  # pragma: no cover
     print(f"[jaguar] autonomous core unavailable: {_e}")
 
 app = Flask(__name__)
-app.secret_key = os.getenv("JAGUAR_SECRET_KEY", "dev-key-change-this-in-production")
+secret_key = os.getenv("JAGUAR_SECRET_KEY")
+if not secret_key:
+    if os.getenv("JAGUAR_ENV", "").lower() == "production":
+        raise RuntimeError("JAGUAR_SECRET_KEY must be configured in production.")
+    secret_key = secrets.token_hex(32)
+app.secret_key = secret_key
 
 ALLOWED_UPLOAD_EXTENSIONS = {
     ".txt", ".md", ".csv", ".log", ".json",
@@ -151,20 +157,23 @@ def status():
 
 
 @app.route("/set-llm-config", methods=["POST"])
+@login_required
 def set_llm_config():
     data = request.get_json() or {}
 
-    state.set_llm_config(
-        enabled=True,
-        provider=data.get("provider"),
-        api_key=data.get("api_key"),
-        model=data.get("model"),
-        temperature=0.7,
-        system_prompt="You are Jaguar AI",
-        ollama_host="http://localhost:11434",
-        tools_enabled=bool(data.get("tools_enabled", False)),
-        workspace_dir=data.get("workspace_dir") or "~",
-    )
+    config = {"enabled": True}
+    config.update({
+        "provider": data.get("provider"),
+        "model": data.get("model"),
+        "temperature": 0.7,
+        "system_prompt": "You are Jaguar AI",
+        "ollama_host": "http://localhost:11434",
+        "tools_enabled": bool(data.get("tools_enabled", False)),
+        "workspace_dir": data.get("workspace_dir") or "~",
+    })
+    if data.get("api_key"):
+        config["api_key"] = data["api_key"]
+    state.set_llm_config(user_id=str(current_user.id), **config)
 
     return {"success": True}
 
@@ -329,16 +338,21 @@ def llm_config():
 
     if request.method == "POST":
         data = request.get_json() or {}
-        state.set_llm_config(**{
-            k: v for k, v in data.items()
-            if k in (
-                "enabled", "provider", "api_key", "model",
-                "temperature", "system_prompt", "ollama_host",
-                "tools_enabled", "workspace_dir",
-            )
-        })
+        state.set_llm_config(
+            user_id=str(current_user.id),
+            **{
+                k: v for k, v in data.items()
+                if k in (
+                    "enabled", "provider", "api_key", "model",
+                    "temperature", "system_prompt", "ollama_host",
+                    "tools_enabled", "workspace_dir",
+                )
+            },
+        )
 
-    return jsonify(state.get_llm_config())
+    config = state.get_llm_config(user_id=str(current_user.id))
+    config["api_key_configured"] = bool(config.pop("api_key", None))
+    return jsonify(config)
 
 
 # ---------------------------------
@@ -375,7 +389,7 @@ def autonomous_run():
     if not goal:
         return jsonify({"ok": False, "error": "Empty goal."}), 400
 
-    cfg = state.get_llm_config()
+    cfg = state.get_llm_config(user_id=str(current_user.id))
     try:
         job = run_autonomous_goal(
             goal=goal,
@@ -440,9 +454,10 @@ def personality_route():
             )
         # Reseat the LLM system prompt so the change is immediate.
         prefs = jaguar_memory.get_preferences(user_id=str(current_user.id))
-        base = state.get_llm_config().get("system_prompt", "")
+        user_id = str(current_user.id)
+        base = state.get_llm_config(user_id=user_id).get("system_prompt", "")
         new_system = jaguar_personality.build_system_prompt(base, preferences=prefs)
-        state.set_llm_config(system_prompt=new_system)
+        state.set_llm_config(user_id=user_id, system_prompt=new_system)
         return jsonify({"ok": True, "preferences": prefs})
 
     return jsonify({

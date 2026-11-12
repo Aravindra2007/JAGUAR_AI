@@ -37,7 +37,7 @@ email matching an existing Jaguar account.
 ```bash
 git clone <your-repo> jaguar_ai && cd jaguar_ai
 cp .env.example .env
-# edit .env: set JAGUAR_DB_*, OPENAI_API_KEY (or other provider key)
+# edit .env: set JAGUAR_SECRET_KEY, Firebase credentials, and an LLM provider key
 pip install -r requirements.txt
 playwright install chromium          # optional, for browser automation
 
@@ -167,7 +167,7 @@ jaguar_ai/
 │
 ├── wsgi.py                      # production WSGI entrypoint
 ├── Dockerfile                   # production image (Flask + FastAPI)
-├── docker-compose.yml           # MySQL + Jaguar local stack
+├── docker-compose.yml           # Jaguar local stack
 ├── Procfile                     # PaaS launch
 ├── fly.toml                     # Fly.io config
 ├── .dockerignore

@@ -1695,7 +1695,7 @@ document.getElementById('save-llm').onclick = async () => {
 
   try {
 
-    await fetch('/set-llm-config', {
+    const response = await fetch('/set-llm-config', {
 
       method: 'POST',
 
@@ -1706,6 +1706,10 @@ document.getElementById('save-llm').onclick = async () => {
       body: JSON.stringify(config)
 
     });
+
+    if (!response.ok) {
+      throw new Error(`Could not save LLM settings (${response.status}).`);
+    }
 
     addMessage(
       'assistant',

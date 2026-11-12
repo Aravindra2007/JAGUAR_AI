@@ -186,7 +186,8 @@ class CommandRouter:
 
     def _ask_llm(self, text, user_id=None):
 
-        cfg = state.get_llm_config()
+        user_id = str(user_id or state.get_current_user_id() or "")
+        cfg = state.get_llm_config(user_id=user_id or None)
 
         if not cfg.get("enabled", True):
             return "Sorry Sir, I didn't understand that command."
@@ -205,7 +206,6 @@ class CommandRouter:
 
         agent_key = agents.pick_agent(text)
         system_prompt = agents.system_prompt_for(agent_key, base_system_prompt)
-        user_id = str(user_id or state.get_current_user_id() or "")
         if user_id:
             memory_context = memory.recall_context_block(
                 text,
@@ -346,11 +346,12 @@ class CommandRouter:
         A plan may return another confirmation envelope when its next
         dependency becomes ready; UI surfaces render it like the first.
         """
-        cfg = state.get_llm_config()
+        user_id = str(user_id or state.get_current_user_id() or "")
+        cfg = state.get_llm_config(user_id=user_id or None)
         workspace_dir = cfg.get("workspace_dir", "") or ""
         executor = ToolExecutor(
             workspace_dir=workspace_dir,
-            user_id=str(user_id or state.get_current_user_id() or ""),
+            user_id=user_id,
         )
         try:
             result = resume_plan(token, decision, executor)
@@ -377,7 +378,7 @@ class CommandRouter:
                 if not isinstance(result, dict):
                     db.save_chat_message(user_id, "[tool action]", str(result))
             except Exception as e:
-                print(f"[router] Could not save confirmation to MySQL: {e}")
+                print(f"[router] Could not save confirmation to Firebase: {e}")
 
         return result
 

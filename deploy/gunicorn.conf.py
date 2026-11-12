@@ -1,10 +1,9 @@
 # gunicorn.conf.py — production WSGI configuration for the Flask GUI.
 # Picked up automatically by gunicorn when launched from this dir.
-import multiprocessing
 import os
 
 bind = os.getenv("GUNICORN_BIND", f"0.0.0.0:{os.getenv('PORT', '5000')}")
-workers = int(os.getenv("WORKERS", str(min(4, multiprocessing.cpu_count() * 2 + 1))))
+workers = int(os.getenv("WORKERS", "1"))
 threads = int(os.getenv("THREADS", "2"))
 timeout = int(os.getenv("TIMEOUT", "120"))
 graceful_timeout = int(os.getenv("GRACEFUL_TIMEOUT", "30"))
