@@ -18,6 +18,7 @@ _lock = threading.Lock()
 _current_status = "Idle"
 _current_text = "Welcome to Jaguar AI"
 _history = []
+_web_pending_confirmations = {}
 _muted = False
 
 # ---------------------------------
@@ -195,6 +196,60 @@ def get_status():
 def get_history():
     with _lock:
         return list(_history)
+
+
+def add_web_pending_confirmation(user_id, user_text, response):
+    envelope = (response.get("envelope") or {}) if isinstance(response, dict) else {}
+    token = envelope.get("token")
+    if not token:
+        return
+    with _lock:
+        _web_pending_confirmations[token] = {
+            "user_id": str(user_id or ""),
+            "user": str(user_text or ""),
+            "assistant": response,
+            "expires_at": time.time() + 300,
+        }
+
+
+def remove_web_pending_confirmation(token, user_id=None):
+    with _lock:
+        pending = _web_pending_confirmations.get(token)
+        if pending is None:
+            return
+        if user_id is not None and pending["user_id"] != str(user_id or ""):
+            return
+        _web_pending_confirmations.pop(token, None)
+
+
+def get_web_pending_confirmations(user_id):
+    user_id = str(user_id or "")
+    with _lock:
+        now = time.time()
+        expired = [
+            token
+            for token, pending in _web_pending_confirmations.items()
+            if pending["expires_at"] <= now
+        ]
+        for token in expired:
+            _web_pending_confirmations.pop(token, None)
+        return [
+            {"user": pending["user"], "assistant": pending["assistant"]}
+            for pending in _web_pending_confirmations.values()
+            if pending["user_id"] == user_id
+        ]
+
+
+def clear_web_pending_confirmations(user_id):
+    user_id = str(user_id or "")
+    with _lock:
+        tokens = [
+            token
+            for token, pending in _web_pending_confirmations.items()
+            if pending["user_id"] == user_id
+        ]
+        for token in tokens:
+            _web_pending_confirmations.pop(token, None)
 
 
 def set_muted(muted):

@@ -760,6 +760,80 @@
       opacity: 0;
     }
   }
+
+  @media (max-width: 760px) {
+    body {
+      flex-direction: column;
+      overflow: hidden;
+      height: 100dvh;
+    }
+
+    .sidebar {
+      width: 100%;
+      min-width: 0;
+      max-height: 42dvh;
+      overflow-y: auto;
+      padding: 12px;
+      border-right: 0;
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+    .brand {
+      margin-bottom: 10px;
+    }
+
+    .status-card {
+      margin-bottom: 10px;
+    }
+
+    .sidebar-section-label {
+      margin: 10px 0 6px;
+    }
+
+    .sidebar-footer {
+      margin-top: 12px;
+    }
+
+    .main {
+      min-height: 0;
+      height: auto;
+    }
+
+    .topbar {
+      padding: 12px 16px;
+    }
+
+    .chat-scroll {
+      min-height: 0;
+      padding: 16px;
+    }
+
+    .composer {
+      padding: 12px 14px 16px;
+    }
+
+    .msg {
+      max-width: 100%;
+    }
+
+    .confirm-card {
+      margin-left: 0;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .sidebar {
+      max-height: 38dvh;
+    }
+
+    .topbar .sub {
+      font-size: 11px;
+    }
+
+    .composer-hint {
+      line-height: 1.4;
+    }
+  }
 </style>
 </head>
 
@@ -1038,6 +1112,31 @@
 const chatScroll = document.getElementById('chat-scroll');
 const emptyState = document.getElementById('empty-state');
 const textInput = document.getElementById('text-input');
+const sendButton = document.getElementById('btn-send');
+let sendingMessage = false;
+
+async function requestJson(url, options = {}) {
+  const res = await fetch(url, options);
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`The server returned an invalid response (${res.status}).`);
+  }
+
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`The server returned an invalid response (${res.status}).`);
+  }
+
+  if (!res.ok) {
+    const message = data.error || data.response;
+    throw new Error(
+      typeof message === 'string' ? message : `Request failed (${res.status}).`
+    );
+  }
+
+  return data;
+}
 
 function scrollToBottom() {
   chatScroll.scrollTop = chatScroll.scrollHeight;
@@ -1079,6 +1178,7 @@ function addMessage(role, text) {
   chatScroll.appendChild(wrap);
 
   scrollToBottom();
+  return wrap;
 }
 
 /* ================= ATTACHMENT CHIP ================= */
@@ -1097,6 +1197,7 @@ function addAttachmentChip(filename) {
   chatScroll.appendChild(chip);
 
   scrollToBottom();
+  return chip;
 }
 
 /* ================= CONFIRMATION ================= */
@@ -1133,33 +1234,40 @@ function addConfirmCard(prompt, token) {
 
 async function resolveConfirm(token, decision, card) {
 
-  card.querySelectorAll('button').forEach(b => b.disabled = true);
+  const buttons = card.querySelectorAll('button');
+  buttons.forEach(button => button.disabled = true);
 
-  const res = await fetch('/confirm', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      token,
-      decision
-    })
-  });
+  try {
+    const data = await requestJson('/confirm', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        token,
+        decision
+      })
+    });
 
-  const data = await res.json();
+    if (!Object.prototype.hasOwnProperty.call(data, 'response')) {
+      throw new Error('The server response did not include a confirmation result.');
+    }
 
-  card.remove();
-
-  const response = data.response;
-  if (
-    response &&
-    typeof response === 'object' &&
-    response.type === 'needs_confirmation'
-  ) {
-    const env = response.envelope || {};
-    addConfirmCard(env.prompt || 'Confirm this action?', env.token);
-  } else {
-    addMessage('assistant', response);
+    card.remove();
+    const response = data.response;
+    if (
+      response &&
+      typeof response === 'object' &&
+      response.type === 'needs_confirmation'
+    ) {
+      const env = response.envelope || {};
+      addConfirmCard(env.prompt || 'Confirm this action?', env.token);
+    } else {
+      addMessage('assistant', response);
+    }
+  } catch (error) {
+    buttons.forEach(button => button.disabled = false);
+    addMessage('assistant', `Could not resolve confirmation: ${error.message}`);
   }
 }
 
@@ -1167,66 +1275,85 @@ async function resolveConfirm(token, decision, card) {
 
 async function loadHistory() {
 
-  const res = await fetch('/history');
+  try {
+    const rows = await requestJson('/history');
+    if (!Array.isArray(rows)) {
+      throw new Error('The server returned an invalid conversation history.');
+    }
 
-  const rows = await res.json();
+    rows.forEach(row => {
+      addMessage('user', row.user || '');
 
-  rows.forEach(r => {
-
-    addMessage('user', r.user);
-
-    addMessage(
-      'assistant',
-      typeof r.assistant === 'string'
-        ? r.assistant
-        : '[awaiting confirmation]'
-    );
-
-  });
+      const assistant = row.assistant;
+      if (
+        assistant &&
+        typeof assistant === 'object' &&
+        assistant.type === 'needs_confirmation'
+      ) {
+        const envelope = assistant.envelope || {};
+        addConfirmCard(
+          envelope.prompt || 'Confirm this action?',
+          envelope.token
+        );
+      } else {
+        addMessage(
+          'assistant',
+          typeof assistant === 'string' ? assistant : '[Previous response unavailable]'
+        );
+      }
+    });
+  } catch (error) {
+    addMessage('assistant', `Could not load conversation history: ${error.message}`);
+  }
 }
 
 /* ================= SEND TEXT ================= */
 
 async function sendText() {
 
+  if (sendingMessage) return;
+
   const text = textInput.value.trim();
 
   if (!text) return;
 
-  addMessage('user', text);
+  sendingMessage = true;
+  sendButton.disabled = true;
+  const userMessage = addMessage('user', text);
 
-  textInput.value = '';
-  textInput.style.height = 'auto';
+  try {
+    const data = await requestJson('/command', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ text })
+    });
 
-  const res = await fetch('/command', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ text })
-  });
+    if (!Object.prototype.hasOwnProperty.call(data, 'response')) {
+      throw new Error('The server response did not include a message result.');
+    }
 
-  const data = await res.json();
+    textInput.value = '';
+    textInput.style.height = 'auto';
 
-  const response = data.response;
-
-  if (
-    response &&
-    typeof response === 'object' &&
-    response.type === 'needs_confirmation'
-  ) {
-
-    const env = response.envelope || {};
-
-    addConfirmCard(
-      env.prompt || 'Confirm this action?',
-      env.token
-    );
-
-  } else {
-
-    addMessage('assistant', response);
-
+    const response = data.response;
+    if (
+      response &&
+      typeof response === 'object' &&
+      response.type === 'needs_confirmation'
+    ) {
+      const env = response.envelope || {};
+      addConfirmCard(env.prompt || 'Confirm this action?', env.token);
+    } else {
+      addMessage('assistant', response);
+    }
+  } catch (error) {
+    userMessage.remove();
+    addMessage('assistant', `Message was not sent: ${error.message}`);
+  } finally {
+    sendingMessage = false;
+    sendButton.disabled = false;
   }
 }
 
@@ -1267,36 +1394,31 @@ fileInput.addEventListener('change', async () => {
 
   formData.append('file', file);
 
-  addAttachmentChip(file.name + ' (uploading...)');
+  const uploadingChip = addAttachmentChip(file.name + ' (uploading...)');
+  const attachButton = document.getElementById('btn-attach');
+  attachButton.disabled = true;
 
-  const res = await fetch('/upload', {
-    method: 'POST',
-    body: formData
-  });
+  try {
+    const data = await requestJson('/upload', {
+      method: 'POST',
+      body: formData
+    });
 
-  const data = await res.json();
-
-  chatScroll.lastElementChild.remove();
-
-  if (data.success) {
+    uploadingChip.remove();
+    if (!data.success) {
+      throw new Error(data.error || 'The server could not upload this file.');
+    }
 
     addAttachmentChip(data.filename);
-
-    textInput.value =
-      'Please read the file I just attached and ';
-
+    textInput.value = 'Please read the file I just attached and ';
     textInput.focus();
-
-  } else {
-
-    addMessage(
-      'assistant',
-      'Upload failed: ' + (data.error || 'unknown error')
-    );
-
+  } catch (error) {
+    uploadingChip.remove();
+    addMessage('assistant', `Upload failed: ${error.message}`);
+  } finally {
+    fileInput.value = '';
+    attachButton.disabled = false;
   }
-
-  fileInput.value = '';
 
 });
 

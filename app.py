@@ -119,6 +119,8 @@ def command():
     state.set_text(response if isinstance(response, str) else "Awaiting confirmation.")
     if isinstance(response, str):
         state.add_history(text, response)
+    else:
+        state.add_web_pending_confirmation(current_user.id, text, response)
 
     # `response` may be either a string (text reply) or a dict shaped
     # like {"type": "needs_confirmation", "envelope": {...}}. The
@@ -179,11 +181,14 @@ def get_history():
             {"user": r["user_message"], "assistant": r["assistant_reply"]}
             for r in rows
         ]
+        history.extend(state.get_web_pending_confirmations(current_user.id))
         return jsonify(history)
     except Exception as e:
         # Fall back to in-memory history when Firebase is unavailable.
         print(f"[history] Firebase read failed, using in-memory: {e}")
-        return jsonify(state.get_history())
+        history = state.get_history()
+        history.extend(state.get_web_pending_confirmations(current_user.id))
+        return jsonify(history)
 
 
 # ---------------------------------
@@ -195,6 +200,7 @@ def get_history():
 def clear():
 
     state.clear_history()
+    state.clear_web_pending_confirmations(current_user.id)
     state.set_text("Conversation Cleared.")
     try:
         db.clear_chat_history(current_user.id)
@@ -606,11 +612,13 @@ def confirm():
         decision,
         user_id=str(current_user.id),
     )
-    state.add_history("[tool action]", response)
+    state.remove_web_pending_confirmation(token, current_user.id)
     if isinstance(response, dict) and response.get("type") == "needs_confirmation":
+        state.add_web_pending_confirmation(current_user.id, "[tool action]", response)
         prompt = (response.get("envelope") or {}).get("prompt", "Awaiting confirmation.")
         state.set_text(f"[Awaiting confirmation] {prompt}")
     else:
+        state.add_history("[tool action]", response)
         state.set_text(response)
 
     return jsonify({"response": response})

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from plan_executor import PlanValidationError, execute_plan, resume_plan, validate_plan
 from router import CommandRouter
+import state
 import task_state
 from tool_executor import ToolExecutor
 
@@ -240,6 +241,27 @@ class PlanExecutionTests(unittest.TestCase):
         self.assertEqual(other_action["kind"], "confirmation")
         with open(os.path.join(documents, "approved.txt"), encoding="utf-8") as file:
             self.assertEqual(file.read(), "approved")
+
+    def test_web_pending_confirmations_are_restored_only_for_their_owner(self):
+        response = {
+            "type": "needs_confirmation",
+            "envelope": {"token": "web-confirmation-test", "prompt": "Approve?"},
+        }
+        state.add_web_pending_confirmation("web-user-1", "Create a file", response)
+        self.addCleanup(
+            state.remove_web_pending_confirmation,
+            "web-confirmation-test",
+            "web-user-1",
+        )
+
+        self.assertEqual(
+            state.get_web_pending_confirmations("web-user-1"),
+            [{"user": "Create a file", "assistant": response}],
+        )
+        self.assertEqual(state.get_web_pending_confirmations("web-user-2"), [])
+
+        state.remove_web_pending_confirmation("web-confirmation-test", "web-user-2")
+        self.assertEqual(len(state.get_web_pending_confirmations("web-user-1")), 1)
 
     def test_pending_plan_can_only_be_resumed_by_its_owner(self):
         owner_executor = ToolExecutor(
