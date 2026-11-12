@@ -10,7 +10,6 @@
 # the public internet via your hosting platform's port config.
 #
 # Designed for:
-#   - Render      (use render.yaml)
 #   - Railway     (auto-detected Procfile)
 #   - Fly.io      (fly.toml)
 #   - AWS App Runner / ECS / Fargate

@@ -119,7 +119,6 @@ print(r.json())
 See `deploy/README.md` for the full guide. Short version:
 
 * **Docker**: `docker compose up --build`
-* **Render**: push this repo, click "New Blueprint Instance", pick `render.yaml`
 * **Fly.io**: `fly launch --copy-config && fly deploy`
 * **Railway / Heroku-style**: `Procfile` is included
 * **Bare VPS**: `deploy/systemd.service` + `deploy/nginx.conf` + `deploy/gunicorn.conf.py`
@@ -170,7 +169,6 @@ jaguar_ai/
 ├── Dockerfile                   # production image (Flask + FastAPI)
 ├── docker-compose.yml           # MySQL + Jaguar local stack
 ├── Procfile                     # PaaS launch
-├── render.yaml                  # Render blueprint
 ├── fly.toml                     # Fly.io config
 ├── .dockerignore
 ├── requirements.txt             # updated with new deps

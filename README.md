@@ -587,13 +587,6 @@ flyctl deploy
 # Uses fly.toml configuration
 ```
 
-#### Render
-
-```bash
-# Deploy via Render dashboard
-# Uses render.yaml configuration
-```
-
 #### Heroku
 
 ```bash

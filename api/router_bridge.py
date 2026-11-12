@@ -26,8 +26,8 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 def attach_mobile_api(flask_app, fastapi_app=None):
     """Mount the FastAPI app at /mobile inside the given Flask app.
 
-    Useful for single-process deployments (Render free tier, Fly
-    single container, local dev). For larger deployments, run the
+    Useful for single-process deployments (Fly single container,
+    local dev). For larger deployments, run the
     FastAPI app standalone with `uvicorn api.mobile_api:app`.
     """
     if fastapi_app is None:

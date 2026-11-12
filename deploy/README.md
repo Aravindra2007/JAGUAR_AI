@@ -23,17 +23,7 @@ docker run --rm -p 5000:5000 -p 8000:8000 \
 
 `deploy/start.sh` boots both services inside the container, gracefully shuts down on SIGTERM, and is the `CMD` of the Dockerfile.
 
-## 2. Render
-
-`render.yaml` is a Render Blueprint. Click the **Blueprints → New Blueprint Instance** button in Render and point it at this repo; Render reads `render.yaml` and provisions:
-
-* `jaguar-gui`  (Flask GUI, public web service)
-* `jaguar-api`  (FastAPI mobile API, public web service)
-* `jaguar-db`   (managed MySQL 8)
-
-Set `OPENAI_API_KEY` (and any other provider keys) in the Render dashboard after the first deploy.
-
-## 3. Railway / Fly.io / Heroku-style PaaS
+## 2. Railway / Fly.io / Heroku-style PaaS
 
 `Procfile` declares two processes. Most platforms auto-detect it:
 
@@ -42,7 +32,7 @@ Set `OPENAI_API_KEY` (and any other provider keys) in the Render dashboard after
 
 `fly.toml` is included for Fly.io users; `fly launch --copy-config && fly deploy`.
 
-## 4. Bare Linux VPS
+## 3. Bare Linux VPS
 
 ```bash
 git clone <your-repo> /opt/jaguar

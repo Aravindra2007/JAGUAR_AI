@@ -342,7 +342,7 @@ def llm_config():
 
 
 # ---------------------------------
-# Liveness probe (for Docker / Render / Fly / k8s)
+# Liveness probe (for Docker / Fly / Kubernetes)
 # ---------------------------------
 
 @app.route("/health")
