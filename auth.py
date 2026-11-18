@@ -27,6 +27,7 @@ Profile features:
 from __future__ import annotations
 
 import io
+import re
 import random
 import secrets
 import uuid
@@ -66,6 +67,12 @@ import email_utils
 auth_bp = Blueprint("auth", __name__)
 
 login_manager = LoginManager()
+
+_EMAIL_RE = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+)
 
 login_manager.login_view = "auth.login"
 
@@ -165,6 +172,21 @@ def register():
             "confirm_password", ""
         )
 
+        local_part = email.partition("@")[0]
+        if (
+            len(email) > 254
+            or len(local_part) > 64
+            or not _EMAIL_RE.fullmatch(email)
+            or local_part.startswith(".")
+            or local_part.endswith(".")
+            or ".." in local_part
+        ):
+            flash(
+                "Please enter a valid email address.",
+                "error"
+            )
+            return render_template("register.html")
+
         # Password validation
         if password != confirm:
 
@@ -194,14 +216,23 @@ def register():
                 otp
             )
 
-            # Send OTP email
-            email_utils.send_otp_email(
+            # Store verification session so the user can retry delivery.
+            session["verify_user_id"] = row["id"]
+
+            # A code must reach the mailbox before registration can be
+            # presented as successful; entering it verifies mailbox access.
+            email_sent = email_utils.send_otp_email(
                 email,
                 otp
             )
 
-            # Store verification session
-            session["verify_user_id"] = row["id"]
+            if not email_sent:
+                flash(
+                    "We couldn't send a verification code. "
+                    "Check the email address and try resending the code.",
+                    "error"
+                )
+                return redirect(url_for("auth.verify"))
 
             flash(
                 "Account created! Please check your email "
@@ -419,16 +450,23 @@ def verify():
                 otp
             )
 
-            email_utils.send_otp_email(
+            email_sent = email_utils.send_otp_email(
                 user["email"],
                 otp
             )
 
-            flash(
-                "A new verification code has been "
-                "sent to your email.",
-                "info"
-            )
+            if email_sent:
+                flash(
+                    "A new verification code has been "
+                    "sent to your email.",
+                    "info"
+                )
+            else:
+                flash(
+                    "We couldn't send a verification code. "
+                    "Check the email address and try again.",
+                    "error"
+                )
 
             return render_template("verify.html")
 

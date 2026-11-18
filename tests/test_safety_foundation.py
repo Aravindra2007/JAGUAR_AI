@@ -3,6 +3,9 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+import speech_recognition as sr
+
+from listener import CONFIRMATION_LISTEN_ATTEMPTS, VoiceListener
 import state
 from router import CommandRouter
 from tool_executor import ToolExecutor
@@ -157,6 +160,98 @@ class ExplicitRoutingTests(unittest.TestCase):
             )
         )
         self.assertFalse(self.router._is_compound_request("search machine learning"))
+
+
+class VoiceConfirmationTests(unittest.TestCase):
+    def setUp(self):
+        self.listener = VoiceListener()
+        self.listener.running = True
+        self.listener.router = Mock()
+
+    def test_silence_retries_without_becoming_a_denial(self):
+        self.listener.recognizer.listen = Mock(
+            side_effect=sr.WaitTimeoutError("No confirmation heard.")
+        )
+        response = {
+            "type": "needs_confirmation",
+            "envelope": {"token": "pending-token", "prompt": "Open YouTube?"},
+        }
+
+        with patch("listener.speak"):
+            decision = self.listener._listen_for_confirmation(
+                object(),
+                "Open YouTube?",
+            )
+        with patch.object(self.listener, "_defer_unconfirmed_action") as defer:
+            result = self.listener._resolve_or_defer_confirmation(
+                "Open YouTube",
+                response,
+                decision,
+            )
+
+        self.assertIsNone(decision)
+        self.assertIsNone(result)
+        self.assertEqual(
+            self.listener.recognizer.listen.call_count,
+            CONFIRMATION_LISTEN_ATTEMPTS,
+        )
+        defer.assert_called_once_with("Open YouTube", response)
+        self.listener.router.process_with_confirmation.assert_not_called()
+
+    def test_unheard_approval_is_available_in_the_app(self):
+        response = {
+            "type": "needs_confirmation",
+            "envelope": {"token": "pending-token", "prompt": "Open YouTube?"},
+        }
+
+        with (
+            patch("listener.state.get_current_user_id", return_value="user-1"),
+            patch("listener.state.add_web_pending_confirmation") as add_pending,
+            patch("listener.state.add_history"),
+            patch("listener.state.set_text"),
+            patch("listener.state.set_status"),
+            patch("listener.state.is_muted", return_value=True),
+        ):
+            result = self.listener._resolve_or_defer_confirmation(
+                "Open YouTube",
+                response,
+                None,
+            )
+
+        self.assertIsNone(result)
+        add_pending.assert_called_once_with("user-1", "Open YouTube", response)
+        self.listener.router.process_with_confirmation.assert_not_called()
+
+    def test_do_it_is_recognized_as_approval(self):
+        self.listener.recognizer.listen = Mock(return_value="audio")
+        self.listener.recognizer.recognize_google = Mock(return_value="Do it!")
+
+        with patch("listener.speak"):
+            decision = self.listener._listen_for_confirmation(
+                object(),
+                "Open YouTube?",
+            )
+
+        self.assertEqual(decision, "yes")
+
+    def test_explicit_no_still_denies_confirmation(self):
+        response = {
+            "type": "needs_confirmation",
+            "envelope": {"token": "pending-token", "prompt": "Open YouTube?"},
+        }
+        self.listener.router.process_with_confirmation.return_value = "Cancelled."
+
+        result = self.listener._resolve_or_defer_confirmation(
+            "Open YouTube",
+            response,
+            "no",
+        )
+
+        self.assertEqual(result, "Cancelled.")
+        self.listener.router.process_with_confirmation.assert_called_once_with(
+            "pending-token",
+            "no",
+        )
 
 
 if __name__ == "__main__":

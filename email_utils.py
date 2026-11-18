@@ -45,9 +45,9 @@ def send_otp_email(email, otp):
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()  # Secure the connection
         server.login(sender_email, sender_password)
-        server.send_message(message)
+        refused_recipients = server.send_message(message)
         server.quit()
-        return True
+        return not refused_recipients
     except Exception as e:
         print(f"Failed to send OTP email to {email}: {e}")
         return False

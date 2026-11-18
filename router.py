@@ -93,6 +93,11 @@ class CommandRouter:
             "open vs code": self.cmd.open_vscode,
             "close vs code": self.cmd.close,
 
+            # Desktop control
+            "click": self._desktop_click,
+            "type": self._desktop_type,
+            "press": self._desktop_press,
+
             # System
             "time": self.cmd.get_time,
             "date": self.cmd.get_date,
@@ -118,7 +123,14 @@ class CommandRouter:
 
         route = None if self._is_compound_request(text) else self._match_route(text)
         if route is not None:
-            result = route(text.lower())
+            route_text = (
+                text
+                if getattr(route, "__name__", "") in {
+                    "_desktop_click", "_desktop_type", "_desktop_press",
+                }
+                else text.lower()
+            )
+            result = route(route_text)
             self._persist(text, result, user_id=owner)
             return result
 
@@ -143,12 +155,77 @@ class CommandRouter:
             "book train", "train", "ticket", "write", "create a folder",
             "search youtube", "search", "spotify play", "play", "movie",
             "film", "bus ticket", "bus", "ttd", "tirupati", "balaji",
+            "click", "type", "press",
         }
         for command in sorted(argument_routes, key=len, reverse=True):
             function = normalized_routes.get(command)
             if function is not None and normalized.startswith(command + " "):
                 return function
         return None
+
+    def _desktop_click(self, text):
+        target = re.sub(r"^click(?:\s+on)?\s*", "", text.strip(), count=1, flags=re.I)
+        target = re.sub(r"^(?:the|on)\s+", "", target, count=1, flags=re.I).strip()
+        if not target:
+            return "Tell me the visible label to click, or give screen coordinates."
+        target = re.sub(r"\s+(?:button|icon)$", "", target, count=1, flags=re.I).strip()
+        coordinates = re.fullmatch(
+            r"(?:at\s+)?(-?\d+)\s*(?:,|\s)\s*(-?\d+)",
+            target,
+            flags=re.I,
+        )
+        if coordinates:
+            return self._run_desktop_tool("desktop_click", {
+                "x": int(coordinates.group(1)),
+                "y": int(coordinates.group(2)),
+            })
+        return self._run_desktop_tool("desktop_click", {"target_text": target})
+
+    def _desktop_type(self, text):
+        content = re.sub(r"^type\s*", "", text.strip(), count=1, flags=re.I)
+        if not content:
+            return "Tell me what text to type."
+        return self._run_desktop_tool("desktop_type", {"text": content})
+
+    def _desktop_press(self, text):
+        keys_text = re.sub(r"^press\s*", "", text.strip(), count=1, flags=re.I)
+        keys_text = re.sub(r"^the\s+", "", keys_text, count=1, flags=re.I)
+        keys_text = re.sub(r"\s+key$", "", keys_text, count=1, flags=re.I).strip()
+        if not keys_text:
+            return "Tell me which key or shortcut to press."
+        keys = [
+            key.strip()
+            for key in re.split(r"\s*(?:\+|,|\s)\s*", keys_text)
+            if key.strip()
+        ]
+        if len(keys) > 1:
+            return self._run_desktop_tool("desktop_hotkey", {"keys": keys})
+        return self._run_desktop_tool("desktop_press", {"key": keys[0]})
+
+    @staticmethod
+    def _run_desktop_tool(tool_name, tool_input):
+        user_id = str(state.get_current_user_id() or "")
+        config = state.get_llm_config(user_id=user_id or None)
+        if not config.get("tools_enabled", False):
+            return "Desktop control is disabled. Enable local tools in Jaguar settings first."
+
+        executor = ToolExecutor(
+            workspace_dir=config.get("workspace_dir", "") or "",
+            user_id=user_id,
+        )
+        result = executor.execute(tool_name, tool_input)
+        if result["kind"] == "confirmation":
+            state.set_text(f"[Awaiting confirmation] {result['prompt']}")
+            return {
+                "type": "needs_confirmation",
+                "envelope": {
+                    "token": result["token"],
+                    "tool_name": result["tool_name"],
+                    "tool_input": result["tool_input"],
+                    "prompt": result["prompt"],
+                },
+            }
+        return result["text"]
 
     @staticmethod
     def _is_compound_request(text):

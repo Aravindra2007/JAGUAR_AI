@@ -86,6 +86,16 @@ WEBSITE_ALLOWLIST = {
 
 WORKSPACE_MAX_READ_CHARS = 8000
 SHELL_OUTPUT_MAX_CHARS = 4000
+MAX_DESKTOP_TEXT_CHARS = 2000
+
+DESKTOP_KEYS = {
+    *(chr(code) for code in range(ord("a"), ord("z") + 1)),
+    *(str(number) for number in range(10)),
+    *(f"f{number}" for number in range(1, 13)),
+    "alt", "backspace", "capslock", "ctrl", "delete", "down", "end",
+    "enter", "esc", "home", "insert", "left", "pagedown", "pageup",
+    "right", "shift", "space", "tab", "up", "win",
+}
 
 # Only allow shell commands composed of these characters. Blocks
 # metacharacters (& | ; > < ` $ ( ) * ? etc.) even if the head token
@@ -435,6 +445,166 @@ def close_app(workspace_dir: str = "") -> ToolOutcome:
     )
 
 
+def desktop_click(
+    target_text: str = "",
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+    button: str = "left",
+    workspace_dir: str = "",
+) -> ToolOutcome:
+    target_text = (target_text or "").strip()
+    if bool(target_text) == (x is not None or y is not None):
+        return ToolOutcome(
+            "Specify either visible target text or both screen coordinates.",
+            False,
+            None,
+            False,
+        )
+    if (x is None) != (y is None):
+        return ToolOutcome("Both x and y coordinates are required.", False, None, False)
+    if button not in {"left", "right", "middle"}:
+        return ToolOutcome("Mouse button must be left, right, or middle.", False, None, False)
+
+    if target_text:
+        prompt = f"Click the visible screen text '{target_text}'?"
+        action = f"Click screen text '{target_text}'"
+    else:
+        prompt = f"Click at screen coordinates ({x}, {y})?"
+        action = f"Click at ({x}, {y})"
+    if button != "left":
+        prompt = f"{prompt[:-1]} with the {button} mouse button?"
+        action = f"{action} with the {button} mouse button"
+    return ToolOutcome(
+        text=f"Will {action}.",
+        mutating=True,
+        confirmation_prompt=prompt,
+    )
+
+
+def desktop_type(text: str, workspace_dir: str = "") -> ToolOutcome:
+    text = text or ""
+    if not text.strip():
+        return ToolOutcome("Text to type cannot be empty.", False, None, False)
+    if len(text) > MAX_DESKTOP_TEXT_CHARS:
+        return ToolOutcome(
+            f"Text to type cannot exceed {MAX_DESKTOP_TEXT_CHARS} characters.",
+            False,
+            None,
+            False,
+        )
+    preview = text if len(text) <= 80 else text[:77] + "..."
+    return ToolOutcome(
+        f"Will type {len(text)} characters.",
+        True,
+        f"Type this text into the focused window: {preview!r}?",
+    )
+
+
+def desktop_press(key: str, workspace_dir: str = "") -> ToolOutcome:
+    key = _normalize_desktop_key(key)
+    if key not in DESKTOP_KEYS:
+        return ToolOutcome(f"Unsupported keyboard key: {key!r}.", False, None, False)
+    return ToolOutcome(
+        f"Will press {key}.",
+        True,
+        f"Press the {key} key?",
+    )
+
+
+def desktop_hotkey(keys: List[str], workspace_dir: str = "") -> ToolOutcome:
+    if not isinstance(keys, list) or not 2 <= len(keys) <= 4:
+        return ToolOutcome("A keyboard shortcut must contain 2 to 4 keys.", False, None, False)
+    normalized = [_normalize_desktop_key(key) for key in keys]
+    invalid = [key for key in normalized if key not in DESKTOP_KEYS]
+    if invalid:
+        return ToolOutcome(
+            f"Unsupported keyboard key: {invalid[0]!r}.",
+            False,
+            None,
+            False,
+        )
+    shortcut = "+".join(normalized)
+    return ToolOutcome(
+        f"Will press {shortcut}.",
+        True,
+        f"Press the {shortcut} keyboard shortcut?",
+    )
+
+
+def _normalize_desktop_key(key: str) -> str:
+    aliases = {
+        "control": "ctrl",
+        "escape": "esc",
+        "return": "enter",
+        "windows": "win",
+    }
+    normalized = str(key or "").strip().casefold()
+    return aliases.get(normalized, normalized)
+
+
+def _find_screen_text(target_text: str) -> tuple[int, int]:
+    """Find one unambiguous OCR text match and return its screen center."""
+    try:
+        import pyautogui
+        import pytesseract
+    except ImportError as error:
+        raise RuntimeError(
+            "Text-based clicking requires PyAutoGUI, pytesseract, and the "
+            "Tesseract OCR engine. Use screen coordinates or install them."
+        ) from error
+
+    target_words = re.findall(r"\w+", target_text.casefold())
+    if target_words and target_words[0] == "the":
+        target_words = target_words[1:]
+    if target_words and target_words[-1] in {"button", "icon"}:
+        target_words = target_words[:-1]
+    if not target_words:
+        raise ValueError("The screen text to click must include a visible label.")
+
+    image = pyautogui.screenshot()
+    detected = pytesseract.image_to_data(
+        image,
+        output_type=pytesseract.Output.DICT,
+    )
+    lines = {}
+    for index, value in enumerate(detected.get("text", [])):
+        word = re.sub(r"\W+", "", str(value).casefold())
+        if not word:
+            continue
+        line_key = (
+            detected["block_num"][index],
+            detected["par_num"][index],
+            detected["line_num"][index],
+        )
+        lines.setdefault(line_key, []).append((
+            word,
+            int(detected["left"][index]),
+            int(detected["top"][index]),
+            int(detected["width"][index]),
+            int(detected["height"][index]),
+        ))
+
+    matches = []
+    for words in lines.values():
+        for start in range(len(words) - len(target_words) + 1):
+            selection = words[start:start + len(target_words)]
+            if [word[0] for word in selection] != target_words:
+                continue
+            left = min(word[1] for word in selection)
+            top = min(word[2] for word in selection)
+            right = max(word[1] + word[3] for word in selection)
+            bottom = max(word[2] + word[4] for word in selection)
+            matches.append(((left + right) // 2, (top + bottom) // 2))
+
+    if not matches:
+        raise ValueError(f"Could not find '{target_text}' on the screen.")
+    if len(matches) > 1:
+        raise ValueError(
+            f"Found more than one '{target_text}' on the screen; use coordinates instead."
+        )
+    return matches[0]
+
+
 # ---------------------------------
 # Tool catalog (Anthropic Messages API format)
 # ---------------------------------
@@ -630,6 +800,83 @@ TOOLS: List[Dict[str, Any]] = [
             "properties": {},
         },
     },
+    {
+        "name": "desktop_click",
+        "description": (
+            "Click the user's desktop after confirmation. To click a visible "
+            "label or button, provide target_text (for example 'Search' or "
+            "'X button'); Jaguar finds a unique OCR match locally. Or provide "
+            "both x and y screen coordinates. You may set button to left, "
+            "right, or middle. If text is missing or ambiguous, the action "
+            "fails safely."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target_text": {
+                    "type": "string",
+                    "description": "Visible text to locate and click.",
+                },
+                "x": {"type": "integer", "description": "Horizontal screen coordinate."},
+                "y": {"type": "integer", "description": "Vertical screen coordinate."},
+                "button": {
+                    "type": "string",
+                    "description": "Mouse button: left, right, or middle.",
+                },
+            },
+        },
+    },
+    {
+        "name": "desktop_type",
+        "description": (
+            "Type up to 2000 characters into the currently focused desktop "
+            "field or application. Requires user confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Exact text to type, preserving capitalization.",
+                },
+            },
+            "required": ["text"],
+        },
+    },
+    {
+        "name": "desktop_press",
+        "description": (
+            "Press one keyboard key in the focused desktop application. "
+            "Supported keys include letters, digits, F1-F12, Enter, Escape, "
+            "Tab, arrows, Backspace, Delete, and modifier keys. Requires "
+            "user confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "One supported key name."},
+            },
+            "required": ["key"],
+        },
+    },
+    {
+        "name": "desktop_hotkey",
+        "description": (
+            "Press a keyboard shortcut containing 2 to 4 supported keys, "
+            "such as ['ctrl', 'f']. Requires user confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Two to four keys in the shortcut.",
+                },
+            },
+            "required": ["keys"],
+        },
+    },
 ]
 
 
@@ -651,6 +898,16 @@ def _invoke(tool_name: str, tool_input: Dict[str, Any], workspace_dir: str) -> T
         "set_reminder":      lambda i: set_reminder(i.get("message", ""), i.get("fire_at_iso", ""), workspace_dir),
         "run_shell_command": lambda i: run_shell_command(i.get("command", ""), workspace_dir),
         "close_app":         lambda i: close_app(workspace_dir),
+        "desktop_click":     lambda i: desktop_click(
+            i.get("target_text", ""),
+            i.get("x"),
+            i.get("y"),
+            i.get("button", "left"),
+            workspace_dir,
+        ),
+        "desktop_type":      lambda i: desktop_type(i.get("text", ""), workspace_dir),
+        "desktop_press":     lambda i: desktop_press(i.get("key", ""), workspace_dir),
+        "desktop_hotkey":    lambda i: desktop_hotkey(i.get("keys", []), workspace_dir),
     }
     handler = handlers.get(tool_name)
     if handler is None:
@@ -820,6 +1077,84 @@ def run_confirmed(
             return {"success": True, "text": "Sent Alt+F4 to the active window."}
         except Exception as e:
             return {"success": False, "text": f"Could not send Alt+F4: {e}"}
+
+    if tool_name == "desktop_click":
+        try:
+            import pyautogui
+            target_text = (tool_input.get("target_text") or "").strip()
+            x = tool_input.get("x")
+            y = tool_input.get("y")
+            button = tool_input.get("button", "left")
+            if button not in {"left", "right", "middle"}:
+                return {"success": False, "text": "Mouse button must be left, right, or middle."}
+            if target_text:
+                if x is not None or y is not None:
+                    return {
+                        "success": False,
+                        "text": "Specify either visible target text or screen coordinates, not both.",
+                    }
+                x, y = _find_screen_text(target_text)
+            elif x is None or y is None:
+                return {
+                    "success": False,
+                    "text": "Specify visible target text or both screen coordinates.",
+                }
+            width, height = pyautogui.size()
+            if not (0 <= int(x) < width and 0 <= int(y) < height):
+                return {
+                    "success": False,
+                    "text": f"Screen coordinates must be within {width}x{height}.",
+                }
+            pyautogui.click(x=int(x), y=int(y), button=button)
+            return {
+                "success": True,
+                "text": f"Clicked at ({int(x)}, {int(y)}).",
+                "data": {"x": int(x), "y": int(y), "button": button},
+            }
+        except Exception as error:
+            return {"success": False, "text": f"Could not click the desktop: {error}"}
+
+    if tool_name == "desktop_type":
+        text = tool_input.get("text") or ""
+        if not text.strip():
+            return {"success": False, "text": "Text to type cannot be empty."}
+        if len(text) > MAX_DESKTOP_TEXT_CHARS:
+            return {
+                "success": False,
+                "text": f"Text to type cannot exceed {MAX_DESKTOP_TEXT_CHARS} characters.",
+            }
+        try:
+            import pyautogui
+            pyautogui.write(text, interval=0.02)
+            return {"success": True, "text": f"Typed {len(text)} characters."}
+        except Exception as error:
+            return {"success": False, "text": f"Could not type text: {error}"}
+
+    if tool_name == "desktop_press":
+        key = _normalize_desktop_key(tool_input.get("key", ""))
+        if key not in DESKTOP_KEYS:
+            return {"success": False, "text": f"Unsupported keyboard key: {key!r}."}
+        try:
+            import pyautogui
+            pyautogui.press(key)
+            return {"success": True, "text": f"Pressed {key}."}
+        except Exception as error:
+            return {"success": False, "text": f"Could not press {key}: {error}"}
+
+    if tool_name == "desktop_hotkey":
+        keys = tool_input.get("keys", [])
+        if not isinstance(keys, list) or not 2 <= len(keys) <= 4:
+            return {"success": False, "text": "A keyboard shortcut must contain 2 to 4 keys."}
+        keys = [_normalize_desktop_key(key) for key in keys]
+        invalid = [key for key in keys if key not in DESKTOP_KEYS]
+        if invalid:
+            return {"success": False, "text": f"Unsupported keyboard key: {invalid[0]!r}."}
+        try:
+            import pyautogui
+            pyautogui.hotkey(*keys)
+            return {"success": True, "text": f"Pressed {'+'.join(keys)}."}
+        except Exception as error:
+            return {"success": False, "text": f"Could not press shortcut: {error}"}
 
     return {"success": False, "text": f"Unknown tool: {tool_name}"}
 

@@ -225,6 +225,14 @@ The initial and follow-up plans share a 12-step task limit. Pending approval
 tokens expire after five minutes. Pending task continuation is kept in memory;
 verification is limited to the checks supported by the observation engine.
 
+Desktop control is also available when **Enable local tools** is on. For example,
+send `click the Search button`, `type Hello Jaguar`, or `press ctrl+f`; Jaguar
+asks for approval before each click or keystroke. Text-based clicks use local
+Tesseract OCR to find a unique visible label; if OCR is unavailable or the label
+is ambiguous, the click is refused. You can also ask to click screen coordinates.
+Install the Tesseract OCR engine on Windows for text-based clicking; PyAutoGUI,
+Pillow, and pytesseract are included in the Python requirements.
+
 Supabase setup requires applying
 [`202611110001_cloud_memory.sql`](./supabase/migrations/202611110001_cloud_memory.sql)
 to the project database and configuring `SUPABASE_URL` and
@@ -235,6 +243,7 @@ the token email must match an existing Jaguar account.
 #### 9. **Confirmation System** (`confirmations.py`)
 - Prompts user for approval on risky operations
 - Voice-based yes/no confirmation
+- Retries unclear voice responses; silence does not count as a denial
 - Visual feedback via overlay
 - Timeout handling for safety
 
