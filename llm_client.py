@@ -86,7 +86,7 @@ def ask_gemini(
         raise LLMError("No Gemini API key was provided.")
 
     try:
-        from google import genai
+        import google.genai as genai
 
         client = genai.Client(api_key=api_key)
 
