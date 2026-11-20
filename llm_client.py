@@ -10,7 +10,7 @@ Supported providers:
 - Ollama
 
 Install:
-    pip install openai anthropic ollama google-generativeai
+    pip install openai anthropic ollama google-genai
 """
 
 from __future__ import annotations
@@ -82,14 +82,14 @@ def ask_gemini(
     temperature: float = 0.7,
     stream: bool = True,
 ):
-    import google.generativeai as genai
-
     if not api_key:
         raise LLMError("No Gemini API key was provided.")
 
-    genai.configure(api_key=api_key)
-
     try:
+        from google import genai
+
+        client = genai.Client(api_key=api_key)
+
         # Convert OpenAI-style messages → single prompt string
         prompt = ""
         for msg in messages:
@@ -103,29 +103,32 @@ def ask_gemini(
             else:
                 prompt += f"[USER]: {content}\n"
 
-        model_obj = genai.GenerativeModel(model)
-
         # ---------------- STREAM ----------------
         if stream:
             def _gen() -> Iterator[str]:
-                response = model_obj.generate_content(
-                    prompt,
-                    stream=True,
-                    generation_config={"temperature": temperature},
-                )
-                for chunk in response:
-                    if chunk.text:
-                        yield chunk.text
+                try:
+                    response = client.models.generate_content_stream(
+                        model=model,
+                        contents=prompt,
+                        config={"temperature": temperature},
+                    )
+                    for chunk in response:
+                        text = getattr(chunk, "text", None)
+                        if text:
+                            yield text
+                except Exception as e:
+                    raise LLMError(str(e))
 
             return _gen()
 
         # ---------------- NORMAL ----------------
-        response = model_obj.generate_content(
-            prompt,
-            generation_config={"temperature": temperature},
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config={"temperature": temperature},
         )
 
-        return response.text
+        return getattr(response, "text", "")
 
     except Exception as e:
         raise LLMError(str(e))
